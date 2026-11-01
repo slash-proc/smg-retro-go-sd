@@ -39,7 +39,7 @@ jobs:
           fi
           TAG="$(node -e 'console.log(require("./_site/dist/versions.json").versions[0].tag)')"
           gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern smg_iso_verifier.wasm --dir _site
-          cp retro-go-sd/site/index.html retro-go-sd/site/app.js _site/
+          cp retro-go-sd/site/index.html retro-go-sd/site/app.js retro-go-sd/site/zip-worker.js _site/
           cp tools/wasm_converter/web/style.css tools/wasm_converter/web/extract-worker.js _site/
           cp tools/wasm_converter/web/worker.js _site/verify-worker.js
           touch _site/.nojekyll

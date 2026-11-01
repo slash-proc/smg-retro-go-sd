@@ -1,14 +1,17 @@
 const $ = (id) => document.getElementById(id);
 const indexUrl = new URL('dist/versions.json', location.href);
-let versions = [], selected, objectUrl, worker, verifiedFile, verifiedVersion;
+let versions = [], selected, objectUrl, zipUrl, worker, verifiedFile, verifiedVersion;
 
 function resetResult() {
   verifiedFile = null;
   verifiedVersion = null;
   $('progress').hidden = true;
   $('download').hidden = true;
+  $('download-zip').hidden = true;
   if (objectUrl) URL.revokeObjectURL(objectUrl);
+  if (zipUrl) URL.revokeObjectURL(zipUrl);
   objectUrl = null;
+  zipUrl = null;
 }
 
 function status(text, kind = '') {
@@ -35,7 +38,10 @@ async function selectVersion() {
   const tool = manifest.tools.find((item) => item.id === 'smg-assets');
   if (manifest.schemaVersion !== 1 || !tool || tool.processor.extensions?.['range-input'] !== 1)
     throw new Error('This release does not provide the required streaming converter.');
-  selected = { tool, wasmUrl: new URL(tool.binary.url, manifestUrl).href };
+  const target = manifest.targets.find((item) => item.id === 'gnw-retro-go');
+  const artifacts = ['SMG.bin', 'smg_code.xip'].map((name) => target?.artifacts.find((item) => item.filename === name));
+  if (artifacts.some((item) => !item)) throw new Error('This release is missing required install files.');
+  selected = { tool, tag: entry.tag, artifacts: artifacts.map((item) => ({ ...item, url: new URL(item.url, manifestUrl).href })), wasmUrl: new URL(tool.binary.url, manifestUrl).href };
   if (entry.bundle) {
     $('bundle').href = new URL(entry.bundle, indexUrl).href;
     $('bundle').hidden = false;
@@ -46,7 +52,7 @@ async function selectVersion() {
   status('Choose your USA disc image.');
 }
 
-function runWorker(script, message, onProgress) {
+function runWorker(script, message, onProgress, transfer = []) {
   return new Promise((resolve, reject) => {
     worker = new Worker(script, { type: 'module' });
     worker.onerror = (event) => { worker.terminate(); reject(new Error(event.message)); };
@@ -55,7 +61,7 @@ function runWorker(script, message, onProgress) {
       else if (data.type === 'done') { worker.terminate(); resolve(data); }
       else onProgress(data);
     };
-    worker.postMessage(message);
+    worker.postMessage(message, transfer);
   });
 }
 
@@ -79,8 +85,10 @@ async function processFile(mode) {
   $('iso').disabled = true;
   $('buffer-size').disabled = true;
   $('download').hidden = true;
+  $('download-zip').hidden = true;
   $('progress').hidden = false;
   if (objectUrl) URL.revokeObjectURL(objectUrl);
+  if (zipUrl) URL.revokeObjectURL(zipUrl);
   try {
     const input = selected.tool.inputs.find((item) => item.id === 'disc');
     if (!input || !file.name.toLowerCase().endsWith('.iso') || file.size > input.maxBytes)
@@ -118,7 +126,15 @@ async function processFile(mode) {
     const output = selected.tool.outputs.find((item) => item.filename === result.outputName);
     if (!output || result.outputBytes > output.maxBytes || result.outputBytes > selected.tool.limits.maxOutputBytes)
       throw new Error('Converter output does not match the release manifest.');
-    objectUrl = URL.createObjectURL(new Blob([result.output], { type: 'application/octet-stream' }));
+    $('progress').removeAttribute('value');
+    status('Preparing install ZIP and checking release files…');
+    const packaged = await runWorker('zip-worker.js', { artifacts: selected.artifacts, output: result.output, outputName: result.outputName }, () => {}, [result.output]);
+    objectUrl = URL.createObjectURL(packaged.output);
+    zipUrl = URL.createObjectURL(packaged.zip);
+    $('download-zip').href = zipUrl;
+    $('download-zip').download = `smg-${selected.tag}-install.zip`;
+    $('download-zip').textContent = `Download install ZIP (${(packaged.zip.size / 1e6).toFixed(2)} MB)`;
+    $('download-zip').hidden = false;
     $('download').href = objectUrl;
     $('download').download = result.outputName;
     $('download').textContent = `Download ${result.outputName} (${(result.outputBytes / 1e6).toFixed(2)} MB)`;
