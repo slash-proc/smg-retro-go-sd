@@ -13,8 +13,6 @@ on:
 permissions:
   contents: write
   actions: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: release-${{ github.event.inputs.tag || github.ref_name }}
@@ -73,13 +71,3 @@ jobs:
           gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo 'published=true' >> "$GITHUB_OUTPUT"
-  pages:
-    needs: publish
-    if: needs.publish.outputs.published == 'true'
-    permissions:
-      contents: read
-      pages: write
-      id-token: write
-    uses: ./.github/workflows/pages.yml
-    with:
-      release_tag: ${{ needs.publish.outputs.tag }}

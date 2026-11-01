@@ -110,16 +110,18 @@ See [`../PORTING.md`](../PORTING.md) for the porting log and test evidence.
 
 The main-branch CI gate runs `sh tools/run_ci.sh` from the repository root.
 The release build itself needs the locally verified USA ISO; it is not sent to
-GitHub. After pushing a clean commit, waiting for its `runtime-tests` check to
-pass, and pushing the matching version tag, run:
+GitHub. After pushing a clean commit and waiting for its `runtime-tests` check
+to pass, prepare the release before pushing its tag:
 
 ```sh
 sh retro-go-sd/scripts/publish_release.sh v0.0.1
+git tag v0.0.1
+git push origin v0.0.1
 ```
 
 The script rebuilds the artifacts from the local ISO, checks the converter ABI
-and matching version, and stages a bundle for GitHub Actions. The tag and the
-staged bundle trigger the release workflow; it checks CI and the artifact
+and matching version, and stages a bundle for GitHub Actions. Pushing the tag
+then triggers the release workflow; it checks CI and the artifact
 hashes, publishes the release, and deploys Pages. The bundle contains debug-only ELF
 symbols; generated game asset bytes are not included in that ELF. The Pages
 workflow mirrors the published release, validates its manifest and hashes, and

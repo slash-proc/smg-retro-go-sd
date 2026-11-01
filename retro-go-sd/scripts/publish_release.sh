@@ -1,13 +1,14 @@
 #!/bin/sh
-# Publish only a clean, already-pushed tag whose main-branch CI passed.
+# Prepare a clean, already-pushed main commit for a version tag.
 set -eu
 cd "$(dirname "$0")/../.."
 tag=${1:?usage: sh retro-go-sd/scripts/publish_release.sh vMAJOR.MINOR.PATCH}
 test -z "$(git status --porcelain)" || { echo 'working tree must be clean' >&2; exit 1; }
 commit=$(git rev-parse HEAD)
-test "$(git rev-parse "refs/tags/$tag^{commit}")" = "$commit" || { echo 'tag does not point to HEAD' >&2; exit 1; }
+if git rev-parse --verify -q "refs/tags/$tag" >/dev/null; then
+    test "$(git rev-parse "refs/tags/$tag^{commit}")" = "$commit" || { echo 'tag does not point to HEAD' >&2; exit 1; }
+fi
 test "$(git ls-remote origin refs/heads/main | cut -f1)" = "$commit" || { echo 'remote main does not point to HEAD' >&2; exit 1; }
-test "$(git ls-remote origin "refs/tags/$tag" | cut -f1)" = "$(git rev-parse "refs/tags/$tag")" || { echo 'tag is not pushed' >&2; exit 1; }
 # The release workflow independently verifies the latest CI result and the tag.
 
 # These builds use the user's local ISO; neither the ISO nor generated asset

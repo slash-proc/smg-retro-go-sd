@@ -6,9 +6,16 @@ tag=${1:?usage: sh retro-go-sd/scripts/stage_release.sh TAG RELEASE_DIRECTORY}
 files=${2:?usage: sh retro-go-sd/scripts/stage_release.sh TAG RELEASE_DIRECTORY}
 files=$(cd "$files" && pwd)
 case "$tag" in v[0-9]*.[0-9]*.[0-9]*) ;; *) echo 'Expected a version tag' >&2; exit 1 ;; esac
-commit=$(git rev-parse "refs/tags/$tag^{commit}")
+commit=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["source"]["commit"])' "$files/manifest.json")
+if git rev-parse --verify -q "refs/tags/$tag" >/dev/null; then
+    test "$(git rev-parse "refs/tags/$tag^{commit}")" = "$commit" || { echo 'Bundle and tag commits differ' >&2; exit 1; }
+else
+    test "$(git rev-parse HEAD)" = "$commit" || { echo 'Bundle does not match HEAD' >&2; exit 1; }
+fi
 remote=$(git ls-remote origin "refs/tags/$tag" | cut -f1)
-test "$remote" = "$(git rev-parse "refs/tags/$tag")" || { echo 'Tag is not pushed' >&2; exit 1; }
+if [ -n "$remote" ]; then
+    test "$remote" = "$(git rev-parse "refs/tags/$tag")" || { echo 'Local and remote tags differ' >&2; exit 1; }
+fi
 test -f "$files/smg_iso_verifier.wasm" || { echo 'Missing ISO verifier' >&2; exit 1; }
 stage=$(mktemp -d "${TMPDIR:-/tmp}/smg-release-input-XXXXXXXX")
 created=0
