@@ -8,7 +8,14 @@ test('release page verifies the ISO and streams the converter', async ({ page })
   await expect(page.locator('#version')).toHaveValue('v0.0.1');
   await expect(page.locator('#bundle')).toBeVisible();
   await page.locator('#iso').setInputFiles(process.env.SMG_ISO_PATH || '/workspace/baserom_us.iso');
-  await page.locator('#convert').click();
+  if (process.env.SMG_CONVERT_ONLY === '1') {
+    await page.locator('#convert-only').click();
+  } else {
+    await page.locator('#verify').click();
+    await expect(page.locator('#status')).toContainText('Verified RMGE01', { timeout: 840_000 });
+    await expect(page.locator('#progress')).toHaveJSProperty('value', 100);
+    await page.locator('#convert').click();
+  }
   await expect(page.locator('#status')).toHaveClass(/good/, { timeout: 840_000 });
   expect(Number(await page.locator('#status').getAttribute('data-max-range-bytes'))).toBeLessThanOrEqual(8 * 1024 * 1024);
   const memory = Number(await page.locator('#status').getAttribute('data-wasm-memory-bytes'));

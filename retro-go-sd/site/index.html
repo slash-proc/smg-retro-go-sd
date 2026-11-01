@@ -18,8 +18,11 @@
     <p><a id="bundle" hidden>Download offline bundle</a></p>
     <label class="file-picker">Choose USA RMGE01 ISO<input id="iso" type="file" accept=".iso,application/octet-stream"></label>
     <p id="filename" class="filename">No file selected</p>
-    <p class="memory-note">The ISO stays on your device. It is verified and read in 8 MiB ranges.</p>
+    <label class="buffer-choice" for="buffer-size"><span>Verification buffer</span><select id="buffer-size"><option value="64" selected>64 MiB · recommended</option><option value="8">8 MiB · low memory</option><option value="128">128 MiB</option><option value="256">256 MiB · high memory use</option></select></label>
+    <p class="memory-note">The ISO stays on your device. Verification uses the selected buffer; conversion reads ranges up to 8 MiB. Verification can temporarily use twice the selected buffer size.</p>
+    <button id="verify" disabled>Verify source image</button>
     <button id="convert" disabled>Verify and convert</button>
+    <button id="convert-only" disabled>Convert without full verification</button>
     <progress id="progress" max="100" value="0" hidden></progress>
     <p id="status" class="status" role="status" aria-live="polite">Loading releases…</p>
     <p><a id="download" hidden>Download asset sidecar</a></p>
