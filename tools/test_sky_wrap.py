@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Check the production sky copier against independent per-row wrapping."""
 from pathlib import Path
+import os
 import subprocess
 import tempfile
 
@@ -55,7 +56,7 @@ with tempfile.TemporaryDirectory(prefix="sky-wrap-", dir=ROOT / "tmp") as direct
     (path / "test.c").write_text(prefix + source + suffix)
     try:
         subprocess.run([
-            "docker", "run", "--rm", "--name", path.name, "--user", "1000:1000",
+            "docker", "run", "--rm", "--name", path.name, "--user", f"{os.getuid()}:{os.getgid()}",
             "-v", f"{path}:/test", "-w", "/test", "smg-runtime-tests", "sh", "-c",
             "cc -O2 -fsanitize=address -no-pie test.c -o test && ./test && "
             "cc -O2 -fsanitize=address -no-pie -DFRAME_WIDTH=320 -DFRAME_HEIGHT=240 test.c -o native && ./native",

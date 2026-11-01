@@ -6,6 +6,7 @@ other raster work stays shared so this isolates the addressing change.
 """
 import ast
 from pathlib import Path
+import os
 import subprocess
 import tempfile
 
@@ -95,7 +96,7 @@ with tempfile.TemporaryDirectory(prefix='texture-address-', dir=ROOT / 'tmp') as
     work = Path(directory)
     (work / 'test.c').write_text(prefix + production + reference + suffix)
     try:
-        subprocess.run(['docker', 'run', '--rm', '--name', work.name, '--user', '1000:1000',
+        subprocess.run(['docker', 'run', '--rm', '--name', work.name, '--user', f'{os.getuid()}:{os.getgid()}',
                         '-v', f'{work}:/test', '-w', '/test', 'smg-runtime-tests', 'sh', '-c',
                         'cc -O3 -fno-strict-aliasing -fsanitize=address,undefined,float-cast-overflow -no-pie test.c -o test && ./test && '
                         'cc -O3 -fno-strict-aliasing -fsanitize=address,undefined,float-cast-overflow -no-pie -DFRAME_WIDTH=320 -DFRAME_HEIGHT=240 test.c -o native && ./native'], check=True, timeout=120)

@@ -3,13 +3,17 @@
 
 from __future__ import annotations
 
+import argparse
 import json
+import os
+import re
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 from elf_relocations import elf_payloads
+from make_manifest import GWHB_V1_SIZE, pick_gwhb
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -50,12 +54,39 @@ def add_exact_relocations(manifest: dict, elf: Path) -> None:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--tag", default="local", help="release tag, or local for development")
+    parser.add_argument("--dist-dir", type=Path, default=DIST, help="empty output directory for release files")
+    parser.add_argument("--bundle", type=Path, default=BUNDLE, help="offline bundle output path")
+    args = parser.parse_args()
+    if args.tag != "local":
+        match = re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)", args.tag)
+        if not match:
+            parser.error("--tag must be local or a vMAJOR.MINOR.PATCH release")
+        data = (PROJECT / "SMG.bin").read_bytes()
+        header_length = int.from_bytes(data[6:8], "little")
+        metadata_size = pick_gwhb(data, header_length, PROJECT / "SMG.bin")
+        version_offset = 8 + (60 if metadata_size == GWHB_V1_SIZE else 104)
+        if tuple(data[version_offset:version_offset + 3]) != tuple(map(int, match.groups())):
+            parser.error(f"SMG.bin version does not match {args.tag}; rebuild with CORE_VERSION={args.tag}")
     commit = subprocess.check_output(
         ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
     ).strip()
-    manifest = DIST / "manifest.json"
-    shutil.rmtree(DIST, ignore_errors=True)
-    DIST.mkdir(parents=True, exist_ok=True)
+    dist = args.dist_dir.resolve()
+    if dist == DIST.resolve():
+        shutil.rmtree(dist, ignore_errors=True)
+    elif dist.exists() and any(dist.iterdir()):
+        parser.error("--dist-dir must be empty")
+    dist.mkdir(parents=True, exist_ok=True)
+    manifest = dist / "manifest.json"
+    # A full ELF includes the generated game assets. Publish debug symbols with
+    # allocated sections represented as NOBITS, while deriving the relocation
+    # tables from the original ELF below.
+    symbols = dist / "smg_core.elf"
+    subprocess.run([
+        os.environ.get("OBJCOPY", "arm-none-eabi-objcopy"), "--only-keep-debug",
+        str(BUILD / "smg_core.elf"), str(symbols),
+    ], check=True)
 
     command = [
         sys.executable,
@@ -67,11 +98,11 @@ def main() -> None:
         "--wasm",
         str(ROOT / "tools/wasm_converter/web/smg_asset_converter.wasm"),
         "--elf",
-        str(BUILD / "smg_core.elf"),
+        str(symbols),
         "--cover",
         str(BUILD / "cover.jpg"),
         "--tag",
-        "local",
+        args.tag,
         "--repo",
         "slash-proc/smg-retro-go-sd",
         "--commit",
@@ -88,10 +119,14 @@ def main() -> None:
         PROJECT / "SMG.bin",
         PROJECT / "smg_code.xip",
         ROOT / "tools/wasm_converter/web/smg_asset_converter.wasm",
-        BUILD / "smg_core.elf",
         BUILD / "cover.jpg",
     ):
-        shutil.copyfile(source, DIST / source.name)
+        shutil.copyfile(source, dist / source.name)
+
+    # The Pages host verifies the complete ISO before conversion. This helper
+    # is a release attachment, not an installable artifact in the GWRG bundle.
+    verifier = ROOT / "tools/wasm_converter/web/smg_iso_verifier.wasm"
+    shutil.copyfile(verifier, dist / verifier.name)
 
     subprocess.run(
         [
@@ -100,14 +135,14 @@ def main() -> None:
             "--manifest",
             str(manifest),
             "--dir",
-            str(DIST),
+            str(dist),
             "--out",
-            str(BUNDLE),
+            str(args.bundle),
         ],
         cwd=PROJECT,
         check=True,
     )
-    print(f"Local dist: {DIST}")
+    print(f"Distribution files: {dist}")
 
 
 if __name__ == "__main__":

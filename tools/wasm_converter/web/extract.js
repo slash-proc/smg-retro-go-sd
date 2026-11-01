@@ -65,6 +65,8 @@ button.addEventListener("click", () => {
       download.textContent = `Download ${data.outputName} (${(data.outputBytes / 1e6).toFixed(2)} MB)`;
       download.hidden = false;
       status.textContent = `Built ${data.outputName} (${data.outputBytes.toLocaleString()} bytes) from ${data.files} selected source files · ${data.bytes.toLocaleString()} source bytes · ${(data.ranges / 1e6).toFixed(1)} MB ranges · ${(data.memoryBytes / 1e6).toFixed(1)} MB WASM memory · ${data.seconds.toFixed(2)} s.`;
+      status.dataset.maxRangeBytes = String(data.maxRange);
+      status.dataset.wasmMemoryBytes = String(data.memoryBytes);
     }
   };
   worker.postMessage({ file, bufferMiB });

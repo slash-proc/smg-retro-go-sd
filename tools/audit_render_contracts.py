@@ -7,6 +7,7 @@ Checks GBA mip selection/addressing, axis/cone rejection and frustum inheritance
 import ast
 from pathlib import Path
 import random
+import os
 import subprocess
 import tempfile
 
@@ -247,7 +248,7 @@ int main(void){
         (path / "visibility.c").write_text(cull)
         try:
             result = subprocess.run([
-                "docker", "run", "--rm", "--name", path.name, "--user", "1000:1000",
+                "docker", "run", "--rm", "--name", path.name, "--user", f"{os.getuid()}:{os.getgid()}",
                 "-v", f"{path}:/test", "-v", f"{ROOT / 'src'}:/source:ro", "-w", "/test",
                 "smg-runtime-tests", "sh", "-c",
                 "cc -O3 -fno-strict-aliasing -I/source raster.c -o raster && "

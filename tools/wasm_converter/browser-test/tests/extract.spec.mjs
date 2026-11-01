@@ -58,6 +58,11 @@ test("convert the verified USA ISO into the native linked asset XIP", async ({ p
     expect(outputHash).toBe(NATIVE_XIP_SHA256);
     const memoryMatch = result.match(/· ([\d.]+) MB WASM memory ·/);
     expect(memoryMatch).not.toBeNull();
+    const maxRangeBytes = Number(await page.locator("#status").getAttribute("data-max-range-bytes"));
+    const memoryBytes = Number(await page.locator("#status").getAttribute("data-wasm-memory-bytes"));
+    expect(maxRangeBytes).toBeGreaterThan(0);
+    expect(maxRangeBytes).toBeLessThanOrEqual(bufferMiB * 1024 * 1024);
+    if (bufferMiB === 8) expect(memoryBytes).toBeLessThanOrEqual(768 * 1024 * 1024);
 
     console.log(`SMG_XIP_TIMING ${JSON.stringify({
       browser: `${engine} ${browser.version()}`,
@@ -65,6 +70,7 @@ test("convert the verified USA ISO into the native linked asset XIP", async ({ p
       elapsedSeconds: Number(elapsedSeconds.toFixed(2)),
       selectedSourceBytes: SOURCE_BYTES,
       extractorMemoryMiB: Number(memoryMatch[1]) * 1e6 / (1024 * 1024),
+      maxRangeBytes,
       outputBytes: output.byteLength,
       outputSha256: outputHash,
     })}`);

@@ -5,6 +5,7 @@ docker build -t smg-runtime-tests -f tools/tests/Dockerfile .
 python3 tools/test_raster.py
 """
 from pathlib import Path
+import os
 import subprocess
 import tempfile
 
@@ -91,7 +92,7 @@ with tempfile.TemporaryDirectory(prefix="raster-test-", dir=scratch) as director
     path = Path(directory)
     (path / "test.c").write_text(prefix + reference + production + suffix)
     try:
-        subprocess.run(["docker", "run", "--rm", "--name", path.name, "--user", "1000:1000", "-v", f"{path}:/test",
+        subprocess.run(["docker", "run", "--rm", "--name", path.name, "--user", f"{os.getuid()}:{os.getgid()}", "-v", f"{path}:/test",
                         "-w", "/test", "-e", "ASAN_OPTIONS=abort_on_error=1:handle_segv=0", "smg-runtime-tests", "sh", "-c",
                         "cc -O3 -fno-strict-aliasing -no-pie -fsanitize=address -fno-omit-frame-pointer test.c -o test && ./test && "
                         "cc -O3 -fno-strict-aliasing -no-pie -fsanitize=address -fno-omit-frame-pointer -DFRAME_WIDTH=320 -DFRAME_HEIGHT=240 test.c -o test-native && ./test-native"], check=True, timeout=60)

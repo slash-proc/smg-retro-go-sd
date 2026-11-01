@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Sanitized exact-position compact claims against a linear independent oracle."""
 from pathlib import Path
+import os
 import subprocess
 import tempfile
 ROOT=Path(__file__).resolve().parents[1]
@@ -66,5 +67,5 @@ int main(void){
 with tempfile.TemporaryDirectory(prefix="compact-points-",dir=ROOT/"tmp") as directory:
  p=Path(directory);(p/"test.c").write_text(prefix)
  try:
-  subprocess.run(["docker","run","--rm","--name",p.name,"--user","1000:1000","-v",f"{ROOT}:/source:ro","-v",f"{p}:/test","-w","/test","smg-runtime-tests","sh","-c",'cc -O3 -fno-strict-aliasing -no-pie -fsanitize=address,undefined -fno-sanitize-recover=all -I/source/src test.c -o test && exec ./test'],check=True,timeout=90)
+  subprocess.run(["docker","run","--rm","--name",p.name,"--user",f"{os.getuid()}:{os.getgid()}","-v",f"{ROOT}:/source:ro","-v",f"{p}:/test","-w","/test","smg-runtime-tests","sh","-c",'cc -O3 -fno-strict-aliasing -no-pie -fsanitize=address,undefined -fno-sanitize-recover=all -I/source/src test.c -o test && exec ./test'],check=True,timeout=90)
  finally:subprocess.run(["docker","rm","-f",p.name],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)

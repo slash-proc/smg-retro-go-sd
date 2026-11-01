@@ -7,6 +7,7 @@ rational perspective and water contracts remain the correctness oracles.
 """
 import ast
 from pathlib import Path
+import os
 import subprocess
 import tempfile
 
@@ -80,7 +81,7 @@ with tempfile.TemporaryDirectory(prefix='opaque-raster-', dir=ROOT / 'tmp') as d
     (path / 'test.c').write_text(prefix + production + suffix)
     try:
         subprocess.run([
-            'docker', 'run', '--rm', '--name', path.name, '--user', '1000:1000',
+            'docker', 'run', '--rm', '--name', path.name, '--user', f'{os.getuid()}:{os.getgid()}',
             '-v', f'{ROOT}:/work:ro', '-v', f'{path}:/test', '-w', '/test',
             'smg-runtime-tests', 'sh', '-c',
             'cc -O3 -fno-strict-aliasing -fsanitize=address,undefined,float-cast-overflow -no-pie -I/work test.c -o test && ./test && '

@@ -23,11 +23,14 @@ self.onmessage = async ({ data: { file, bufferMiB = 64 } }) => {
 
       const offset = (BigInt(e.verify_request_offset_hi() >>> 0) << 32n) | BigInt(e.verify_request_offset_lo() >>> 0);
       const length = e.verify_request_len();
+      if (length === 0 || length > bufferMiB * 1024 * 1024) throw new Error("The verifier requested an invalid range.");
       if (offset + BigInt(length) > size) throw new Error("The verifier requested a range beyond the image.");
+      const pointer = e.verify_request_buffer_ptr();
+      if (pointer + length > e.memory.buffer.byteLength) throw new Error("The verifier requested a range outside WASM memory.");
       const start = Number(offset);
       const range = new Uint8Array(await file.slice(start, start + length).arrayBuffer());
       if (range.byteLength !== length) throw new Error("The selected file returned a short range.");
-      new Uint8Array(e.memory.buffer, e.verify_request_buffer_ptr(), length).set(range);
+      new Uint8Array(e.memory.buffer, pointer, length).set(range);
       if (e.verify_input_supply(length, 1) !== 0) throw new Error("The verifier rejected a file range.");
     }
 

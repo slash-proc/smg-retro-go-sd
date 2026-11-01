@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Super Mario Galaxy · Retro-Go SD</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+  <header>
+    <div class="eyebrow">RETRO-GO SD</div>
+    <h1>Super Mario Galaxy</h1>
+    <p class="lede">Build the asset sidecar from your own USA disc image.</p>
+  </header>
+  <section class="card">
+    <label class="buffer-choice" for="version"><span>Release</span><select id="version" disabled></select></label>
+    <p><a id="bundle" hidden>Download offline bundle</a></p>
+    <label class="file-picker">Choose USA RMGE01 ISO<input id="iso" type="file" accept=".iso,application/octet-stream"></label>
+    <p id="filename" class="filename">No file selected</p>
+    <p class="memory-note">The ISO stays on your device. It is verified and read in 8 MiB ranges.</p>
+    <button id="convert" disabled>Verify and convert</button>
+    <progress id="progress" max="100" value="0" hidden></progress>
+    <p id="status" class="status" role="status" aria-live="polite">Loading releases…</p>
+    <p><a id="download" hidden>Download asset sidecar</a></p>
+  </section>
+  <footer><a href="https://github.com/slash-proc/smg-retro-go-sd">Source and installation instructions</a></footer>
+</main>
+<script src="app.js" type="module"></script>
+</body>
+</html>

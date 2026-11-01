@@ -121,8 +121,7 @@ pub fn compile(
     let xip = asset_assembler::assemble(&assets.text, 0xBEEF_0000, |name| {
         assets
             .blobs
-            .get(name)
-            .cloned()
+            .remove(name)
             .ok_or_else(|| format!("missing asset compiler blob {name}"))
     })?;
     Ok(xip)

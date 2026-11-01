@@ -123,5 +123,5 @@ with tempfile.TemporaryDirectory(prefix='perspective-test-',dir=ROOT/'tmp') as d
  p=Path(directory);(p/'test.c').write_text(prefix+production+suffix)
  try:
   define=f'-DSMG_PERSPECTIVE_SPAN_MAX={MAX_SPAN}'
-  subprocess.run(['docker','run','--rm','--name',p.name,'--user','1000:1000','-v',f'{p}:/test','-w','/test','-e','ASAN_OPTIONS=abort_on_error=1:handle_segv=0','smg-runtime-tests','sh','-c',f'cc -O3 {define} -fno-strict-aliasing -no-pie -fsanitize=address,undefined,float-cast-overflow test.c -lm -o test && ./test && cc -O3 {define} -fno-strict-aliasing -no-pie -fsanitize=address,undefined,float-cast-overflow -DFRAME_WIDTH=320 -DFRAME_HEIGHT=240 test.c -lm -o test-native && ./test-native'],check=True,timeout=120)
+  subprocess.run(['docker','run','--rm','--name',p.name,'--user',f'{os.getuid()}:{os.getgid()}','-v',f'{p}:/test','-w','/test','-e','ASAN_OPTIONS=abort_on_error=1:handle_segv=0','smg-runtime-tests','sh','-c',f'cc -O3 {define} -fno-strict-aliasing -no-pie -fsanitize=address,undefined,float-cast-overflow test.c -lm -o test && ./test && cc -O3 {define} -fno-strict-aliasing -no-pie -fsanitize=address,undefined,float-cast-overflow -DFRAME_WIDTH=320 -DFRAME_HEIGHT=240 test.c -lm -o test-native && ./test-native'],check=True,timeout=120)
  finally:subprocess.run(['docker','rm','-f',p.name],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)

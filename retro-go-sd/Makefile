@@ -117,7 +117,7 @@ $(SMG_ITCM_PLACEMENT): smg-layout-force scripts/gen_itcm_placement.py
 
 docker:
 	mkdir -p "$(CURDIR)/../tmp"
-	docker run --rm --user "$$(id -u):$$(id -g)" -e TMPDIR=/opt/project/tmp -v "$(CURDIR)/..:/opt/project" -w /opt/project/retro-go-sd $(DOCKER_IMAGE) make all OPT="$(OPT)" SMG_ITCM="$(SMG_ITCM)" SMG_ITCM_VIS="$(SMG_ITCM_VIS)" SMG_ITCM_EMIT="$(SMG_ITCM_EMIT)" SMG_ZBIN_RAM="$(SMG_ZBIN_RAM)" SMG_ZBIN_DTCM="$(SMG_ZBIN_DTCM)" SMG_PARTIAL_CHUNK_CACHE="$(SMG_PARTIAL_CHUNK_CACHE)" SMG_TEXTURE_CACHE_SLOTS="$(SMG_TEXTURE_CACHE_SLOTS)"
+	docker run --rm --user "$$(id -u):$$(id -g)" -e TMPDIR=/opt/project/tmp -v "$(CURDIR)/..:/opt/project" -w /opt/project/retro-go-sd $(DOCKER_IMAGE) make all OPT="$(OPT)" CORE_VERSION="$(CORE_VERSION)" SMG_ITCM="$(SMG_ITCM)" SMG_ITCM_VIS="$(SMG_ITCM_VIS)" SMG_ITCM_EMIT="$(SMG_ITCM_EMIT)" SMG_ZBIN_RAM="$(SMG_ZBIN_RAM)" SMG_ZBIN_DTCM="$(SMG_ZBIN_DTCM)" SMG_PARTIAL_CHUNK_CACHE="$(SMG_PARTIAL_CHUNK_CACHE)" SMG_TEXTURE_CACHE_SLOTS="$(SMG_TEXTURE_CACHE_SLOTS)"
 
 # Build the GWRG bundle from the executable and both mapped XIP sidecars just
 # produced by the Docker SDK build. Keep the manifest and hashes in build/.

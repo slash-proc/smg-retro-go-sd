@@ -5,7 +5,7 @@
 import { readFileSync } from "node:fs";
 
 export const DEFAULT_POLICY = {
-  maxMemoryPages: 16384,
+  maxMemoryPages: 12288,
   maxModuleBytes: 32 * 1024 * 1024,
 };
 

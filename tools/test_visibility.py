@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Differential checks of GNW visibility and transforms against their fallback."""
 from pathlib import Path
+import os
 import subprocess
 import tempfile
 
@@ -214,7 +215,7 @@ with tempfile.TemporaryDirectory(prefix="visibility-test-", dir=ROOT / "tmp") as
     (path / "test.c").write_text(prefix + types + frame[:frame.index("static inline uint8_t frame_get")] +
         (ROOT / "tools/tests/visibility_reference.inc").read_text() + functions + suffix)
     try:
-        subprocess.run(["docker", "run", "--rm", "--name", path.name, "--user", "1000:1000",
+        subprocess.run(["docker", "run", "--rm", "--name", path.name, "--user", f"{os.getuid()}:{os.getgid()}",
             "-v", f"{path}:/test", "-v", f"{ROOT}:/source:ro", "-w", "/test",
             "-e", "ASAN_OPTIONS=abort_on_error=1:handle_segv=0", "smg-runtime-tests", "sh", "-c",
             "cc -O3 -fno-strict-aliasing -no-pie -fsanitize=address -I/source/src test.c -o test && ./test"],

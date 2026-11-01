@@ -1,6 +1,5 @@
 {
   "originalSystem": "wii",
-  "originalName": "Super Mario Galaxy",
   "storage": ["flash", "sd"],
   "artifacts": {
     "smg_code.xip": {

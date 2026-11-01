@@ -2,6 +2,7 @@
 """Independent quarter-alpha, edge ownership and opaque-depth contracts."""
 import ast
 from pathlib import Path
+import os
 import subprocess
 import tempfile
 
@@ -104,7 +105,7 @@ with tempfile.TemporaryDirectory(prefix="water-blend-", dir=ROOT / "tmp") as dir
     (path / "test.c").write_text(prefix + control + production + suffix)
     try:
         subprocess.run([
-            "docker", "run", "--rm", "--name", path.name, "--user", "1000:1000",
+            "docker", "run", "--rm", "--name", path.name, "--user", f"{os.getuid()}:{os.getgid()}",
             "-v", f"{ROOT}:/work:ro", "-v", f"{path}:/test", "-w", "/test",
             "smg-runtime-tests", "sh", "-c",
             "cc -O2 -fno-strict-aliasing -fsanitize=address,undefined -no-pie -I/work test.c "

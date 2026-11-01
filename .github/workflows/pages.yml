@@ -1,0 +1,53 @@
+name: Distribution Pages
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Mirror release files
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -eu
+          if [ -n "$RELEASE_TAG" ]; then
+            python3 retro-go-sd/scripts/build_dist.py --repo "$GITHUB_REPOSITORY" --out _site/dist --retain 3 --require-tag "$RELEASE_TAG"
+          else
+            python3 retro-go-sd/scripts/build_dist.py --repo "$GITHUB_REPOSITORY" --out _site/dist --retain 3
+          fi
+          TAG="$(node -e 'console.log(require("./_site/dist/versions.json").versions[0].tag)')"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern smg_iso_verifier.wasm --dir _site
+          cp retro-go-sd/site/index.html retro-go-sd/site/app.js _site/
+          cp tools/wasm_converter/web/style.css tools/wasm_converter/web/extract-worker.js _site/
+          cp tools/wasm_converter/web/worker.js _site/verify-worker.js
+          touch _site/.nojekyll
+      - name: Verify mirrored release
+        run: |
+          node tools/check_dist.mjs _site
+          node tools/wasm_converter/test-verifier.mjs _site/smg_iso_verifier.wasm
+          TAG="$(node -e 'console.log(require("./_site/dist/versions.json").versions[0].tag)')"
+          node tools/wasm_converter/verify.mjs "$GITHUB_WORKSPACE/_site/dist/$TAG/smg_asset_converter.wasm" '{"range-input":1}'
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deploy
+        uses: actions/deploy-pages@v4

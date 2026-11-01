@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Exercise scene transition code with GBA MMIO deliberately unmapped on GNW."""
 from pathlib import Path
+import os
 import subprocess
 import tempfile
 
@@ -91,7 +92,7 @@ int main(void){
 with tempfile.TemporaryDirectory(prefix='scene-mmio-', dir=ROOT / 'tmp') as directory:
     path = Path(directory)
     (path / 'test.c').write_text(source)
-    subprocess.run(['docker','run','--rm','--user','1000:1000','-v',f'{path}:/test',
+    subprocess.run(['docker','run','--rm','--user',f'{os.getuid()}:{os.getgid()}','-v',f'{path}:/test',
                     '-w','/test','smg-runtime-tests','sh','-c',
                     'cc -O2 -fsanitize=address,undefined -no-pie -D__GNW__ test.c -o gnw && ./gnw && '
                     'cc -O2 -fsanitize=address,undefined -no-pie test.c -o gba && ./gba'], check=True)

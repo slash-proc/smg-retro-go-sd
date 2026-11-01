@@ -2,6 +2,13 @@
 
 ## Current status
 
+The published 8 MiB variant has a 768 MiB WASM memory ceiling. Full ISO
+conversion measured 583,008,256 bytes (about 556 MiB) of linear memory in
+Chromium and Firefox; this includes generated assets and compilation, not just
+the bounded input window. The release page also verifies the complete ISO in
+8 MiB windows before conversion. The live distribution schema must be updated
+for range-input and exact relocations before a release can be published.
+
 The browser converter now reads the USA ISO through bounded host-mediated
 ranges, extracts and generates the selected assets, runs the linked C asset
 compiler, performs canonical packing, and emits the final

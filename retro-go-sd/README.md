@@ -65,6 +65,9 @@ gwprov profile PROFILE apply device:DEVICE --region bank2 --region frogfs \
   --start --bank 2 --yes
 ```
 
+These commands require a profile with the full locally built ELF. Published
+bundles carry a debug-only ELF without the asset section; their declared exact
+relocation tables let the installer place both sidecars without that repair.
 The first command audits without writing. The second patches only actual
 ABS32 pointers, updates the FrogFS CRC and deployable component hash, and leaves
 other flash regions unchanged. Repeat this step after installing project files
@@ -102,3 +105,29 @@ another ISO conversion. GWProv pre-caches the homebrew and sidecars. Current
 rendering and collision regressions, accepted-recording replays, and remaining
 performance/quality limitations are documented in the porting log.
 See [`../PORTING.md`](../PORTING.md) for the porting log and test evidence.
+
+## Publishing a release
+
+The main-branch CI gate runs `sh tools/run_ci.sh` from the repository root.
+The release build itself needs the locally verified USA ISO; it is not sent to
+GitHub. After pushing a clean commit, waiting for its `runtime-tests` check to
+pass, and pushing the matching version tag, run:
+
+```sh
+sh retro-go-sd/scripts/publish_release.sh v0.0.1
+```
+
+The script requires an authenticated GitHub CLI, rebuilds the artifacts from
+the local ISO, checks the converter ABI and matching version, and creates a
+draft release before publishing it. The bundle contains debug-only ELF
+symbols; generated game asset bytes are not included in that ELF. The Pages
+workflow mirrors the published release, validates its manifest and hashes, and
+deploys the browser converter. Enable GitHub Pages with **GitHub Actions** as
+the source in the repository settings before publishing the first release.
+The release script also checks the manifest against the live distribution
+schema; streaming inputs and exact relocations must be deployed to the spec
+before this release can be published.
+
+The ISO is verified and read in bounded 8 MiB ranges. Total converter memory
+also includes generated assets and compilation; the current 8 MiB build has
+measured approximately 556 MiB of WASM linear memory in browser testing.

@@ -28,23 +28,23 @@ docker run --rm \
   -v "$PROJECT_ROOT:/workspace" -w /workspace/tools/wasm_converter \
   rust:1.89-bookworm \
   sh -c 'rustup target add wasm32-unknown-unknown && \
-    cargo build --release --lib --target wasm32-unknown-unknown --no-default-features --features verifier-probe && \
+    cargo build --release --locked --lib --target wasm32-unknown-unknown --no-default-features --features verifier-probe && \
     cp target/wasm32-unknown-unknown/release/smg_iso_verifier.wasm web/smg_iso_verifier.wasm && \
-    SMG_EXTRACT_BUFFER_MIB=8 RUSTFLAGS="-C link-arg=--max-memory=1073741824" cargo build --release --lib --target wasm32-unknown-unknown --no-default-features --features processor && \
+    SMG_EXTRACT_BUFFER_MIB=8 RUSTFLAGS="-C link-arg=--max-memory=805306368" cargo build --release --locked --lib --target wasm32-unknown-unknown --no-default-features --features processor && \
     cp target/wasm32-unknown-unknown/release/smg_iso_verifier.wasm web/smg_asset_converter.wasm && \
     for size in 64 128 256; do \
-      SMG_EXTRACT_BUFFER_MIB=$size RUSTFLAGS="-C link-arg=--max-memory=1073741824" cargo build --release --lib --target wasm32-unknown-unknown --no-default-features --features processor && \
+      SMG_EXTRACT_BUFFER_MIB=$size RUSTFLAGS="-C link-arg=--max-memory=1073741824" cargo build --release --locked --lib --target wasm32-unknown-unknown --no-default-features --features processor && \
       cp target/wasm32-unknown-unknown/release/smg_iso_verifier.wasm web/smg_asset_converter_$size.wasm; \
     done && \
-    RUSTFLAGS="-C link-arg=--max-memory=1073741824" cargo build --release --lib --target wasm32-unknown-unknown --no-default-features --features asset-assembler && \
+    RUSTFLAGS="-C link-arg=--max-memory=1073741824" cargo build --release --locked --lib --target wasm32-unknown-unknown --no-default-features --features asset-assembler && \
     cp target/wasm32-unknown-unknown/release/smg_iso_verifier.wasm web/asset_assembler.wasm && \
     SMG_ASSETC_LINKED_LIB_DIR=/workspace/build/wasm_converter/assetc_linked \
-      SMG_EXTRACT_BUFFER_MIB=8 RUSTFLAGS="-C link-arg=--max-memory=1073741824" \
-      cargo build --release --lib --target wasm32-unknown-unknown --no-default-features --features processor,assetc-linked && \
+      SMG_EXTRACT_BUFFER_MIB=8 RUSTFLAGS="-C link-arg=--max-memory=805306368" \
+      cargo build --release --locked --lib --target wasm32-unknown-unknown --no-default-features --features processor,assetc-linked && \
     cp target/wasm32-unknown-unknown/release/smg_iso_verifier.wasm web/smg_asset_converter.wasm && \
     for size in 64 128 256; do \
       SMG_ASSETC_LINKED_LIB_DIR=/workspace/build/wasm_converter/assetc_linked \
         SMG_EXTRACT_BUFFER_MIB=$size RUSTFLAGS="-C link-arg=--max-memory=1073741824" \
-        cargo build --release --lib --target wasm32-unknown-unknown --no-default-features --features processor,assetc-linked && \
+        cargo build --release --locked --lib --target wasm32-unknown-unknown --no-default-features --features processor,assetc-linked && \
       cp target/wasm32-unknown-unknown/release/smg_iso_verifier.wasm web/smg_asset_converter_$size.wasm; \
     done'

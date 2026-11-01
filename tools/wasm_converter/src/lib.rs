@@ -91,7 +91,7 @@ pub extern "C" fn verify_begin(size_lo: u32, size_hi: u32, buffer_mib: u32) -> u
         return STATUS_BAD_INPUT;
     }
     let capacity = match buffer_mib {
-        64 | 128 | 256 => (buffer_mib as usize) * 1024 * 1024,
+        8 | 64 | 128 | 256 => (buffer_mib as usize) * 1024 * 1024,
         _ => return STATUS_BAD_INPUT,
     };
     unsafe {

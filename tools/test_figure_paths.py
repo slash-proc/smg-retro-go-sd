@@ -5,6 +5,7 @@ Uses production projection/clipping functions and randomized transformed poses;
 the reference always calls the original clipped-face callback.
 """
 from pathlib import Path
+import os
 import subprocess
 import tempfile
 
@@ -127,7 +128,7 @@ with tempfile.TemporaryDirectory(prefix="figure-test-", dir=ROOT / "tmp") as dir
     (path / "test.c").write_text(prefix + header[job_start:job_end] + "\n" + projection + area +
                                   math[mask_start:mask_end] + clipping + figures + suffix)
     try:
-        subprocess.run(["docker", "run", "--rm", "--name", path.name, "--user", "1000:1000", "-v", f"{path}:/test",
+        subprocess.run(["docker", "run", "--rm", "--name", path.name, "--user", f"{os.getuid()}:{os.getgid()}", "-v", f"{path}:/test",
                         "-w", "/test", "-e", "ASAN_OPTIONS=abort_on_error=1:handle_segv=0", "smg-runtime-tests", "sh", "-c",
                         "cc -O3 -fno-strict-aliasing -no-pie -fsanitize=address test.c -o test && ./test"], check=True, timeout=60)
     finally:
