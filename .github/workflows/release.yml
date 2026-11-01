@@ -48,7 +48,10 @@ jobs:
           CI=$(gh run list --repo "$GITHUB_REPOSITORY" --commit "$COMMIT" --workflow ci.yml --limit 1 --json status,conclusion,headSha --jq '.[0] | select(.status == "completed" and .conclusion == "success") | .headSha')
           test "$CI" = "$COMMIT" || { echo 'CI has not passed for the tagged commit' >&2; exit 1; }
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "Release $TAG already exists; leaving it unchanged"
+            test "$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = false || { echo 'Existing release is a draft' >&2; exit 1; }
+            echo "Release $TAG already exists; validating and deploying its mirror"
+            echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+            echo 'published=true' >> "$GITHUB_OUTPUT"
             exit 0
           fi
           if ! git ls-remote --exit-code origin "refs/heads/release-input/$TAG" >/dev/null; then
