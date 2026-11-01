@@ -1,0 +1,82 @@
+name: Publish tagged release
+
+on:
+  push:
+    tags: ['v*']
+    branches: ['release-input/v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  actions: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.publish.outputs.tag }}
+      published: ${{ steps.publish.outputs.published }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Validate and publish the tagged bundle
+        id: publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -eu
+          case "$GITHUB_REF" in
+            refs/tags/v*) TAG=${GITHUB_REF#refs/tags/} ;;
+            refs/heads/release-input/v*) TAG=${GITHUB_REF#refs/heads/release-input/} ;;
+            *) TAG=$INPUT_TAG ;;
+          esac
+          printf '%s' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$' || { echo 'Invalid release tag' >&2; exit 1; }
+          git fetch --force origin "refs/tags/$TAG:refs/tags/$TAG" || { echo "Tag $TAG is not pushed yet"; exit 0; }
+          COMMIT=$(git rev-parse "refs/tags/$TAG^{commit}")
+          CI=$(gh run list --repo "$GITHUB_REPOSITORY" --commit "$COMMIT" --workflow ci.yml --limit 1 --json status,conclusion,headSha --jq '.[0] | select(.status == "completed" and .conclusion == "success") | .headSha')
+          test "$CI" = "$COMMIT" || { echo 'CI has not passed for the tagged commit' >&2; exit 1; }
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; leaving it unchanged"
+            exit 0
+          fi
+          if ! git ls-remote --exit-code origin "refs/heads/release-input/$TAG" >/dev/null; then
+            echo "No prepared bundle for $TAG yet; waiting for its release-input branch"
+            exit 0
+          fi
+          git fetch origin "refs/heads/release-input/$TAG:refs/remotes/origin/release-input/$TAG"
+          mkdir -p release-input
+          git show "refs/remotes/origin/release-input/$TAG:release-input/bundle.zip" > release-input/bundle.zip
+          git show "refs/remotes/origin/release-input/$TAG:release-input/smg_iso_verifier.wasm" > release-input/smg_iso_verifier.wasm
+          python3 retro-go-sd/scripts/validate_release.py --bundle release-input/bundle.zip --tag "$TAG" --commit "$COMMIT" --out release
+          cp release-input/smg_iso_verifier.wasm release/
+          cp release-input/bundle.zip "release/smg-$TAG-bundle.zip"
+          curl -fsSL https://slash-proc.github.io/gwrg-dist-spec/schema/manifest.schema.json -o public-schema.json
+          node tools/validate_manifest.mjs release/manifest.json public-schema.json
+          node tools/wasm_converter/verify.mjs "$GITHUB_WORKSPACE/release/smg_asset_converter.wasm" '{"range-input":1}'
+          node tools/wasm_converter/test-verifier.mjs release/smg_iso_verifier.wasm
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft --title "$TAG" --notes "Super Mario Galaxy Retro-Go SD $TAG" release/*
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo 'published=true' >> "$GITHUB_OUTPUT"
+  pages:
+    needs: publish
+    if: needs.publish.outputs.published == 'true'
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/pages.yml
+    with:
+      release_tag: ${{ needs.publish.outputs.tag }}

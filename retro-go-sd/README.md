@@ -117,9 +117,10 @@ pass, and pushing the matching version tag, run:
 sh retro-go-sd/scripts/publish_release.sh v0.0.1
 ```
 
-The script requires an authenticated GitHub CLI, rebuilds the artifacts from
-the local ISO, checks the converter ABI and matching version, and creates a
-draft release before publishing it. The bundle contains debug-only ELF
+The script rebuilds the artifacts from the local ISO, checks the converter ABI
+and matching version, and stages a bundle for GitHub Actions. The tag and the
+staged bundle trigger the release workflow; it checks CI and the artifact
+hashes, publishes the release, and deploys Pages. The bundle contains debug-only ELF
 symbols; generated game asset bytes are not included in that ELF. The Pages
 workflow mirrors the published release, validates its manifest and hashes, and
 deploys the browser converter. Enable GitHub Pages with **GitHub Actions** as

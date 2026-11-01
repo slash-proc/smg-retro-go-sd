@@ -1,6 +1,11 @@
 name: Distribution Pages
 
 on:
+  workflow_call:
+    inputs:
+      release_tag:
+        required: true
+        type: string
   release:
     types: [published]
   workflow_dispatch:
@@ -25,7 +30,7 @@ jobs:
       - name: Mirror release files
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_TAG: ${{ inputs.release_tag || github.event.release.tag_name }}
         run: |
           set -eu
           if [ -n "$RELEASE_TAG" ]; then
@@ -46,6 +51,8 @@ jobs:
           TAG="$(node -e 'console.log(require("./_site/dist/versions.json").versions[0].tag)')"
           node tools/wasm_converter/verify.mjs "$GITHUB_WORKSPACE/_site/dist/$TAG/smg_asset_converter.wasm" '{"range-input":1}'
       - uses: actions/configure-pages@v5
+        with:
+          enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
