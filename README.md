@@ -1,103 +1,65 @@
-# SMG GBA
+# Super Mario Galaxy for Retro-Go SD
 
-Release of my GBA SMG Project. It uses the engine from Joshua Barettos https://github.com/zesterer as a base and adds a lot of new features. It also implements code from the Galaxy Decomp https://github.com/SMGCommunity/Petari 
+This repository ports [SMG GBA](https://github.com/TobiasFriedly/smg-gba) to
+STM32H7B0-based Game & Watch devices running a compatible Retro-Go SD firmware.
+Our focus is the STM32H7B0 port. We aim to keep the rest of the project close to
+upstream so that future upstream changes are easier to incorporate.
 
-This project contains only code. It contains no assets. Every model, animation, texture, sound, piece of music and line of text is constructed on your computer from your own copy of SMG while the game is built.
+The port produces a homebrew entry point, `SMG.bin`, and two mapped sidecars,
+`smg_code.xip` and `smg_assets.xip`. It does not build or modify Retro-Go
+firmware. The game has run on hardware at 30 FPS; sustained 60 FPS remains a
+goal.
 
-You need:
+## Get the files
 
-- YOUR OWN PERSONAL legal dump of **SMG (USA)** as an `.iso` file
+1. Use your own legally obtained USA Super Mario Galaxy disc image (`RMGE01`)
+   as an ISO. Game assets are generated from your copy and are not distributed
+   in this repository.
+2. Open the [browser converter](https://slash-proc.github.io/smg-retro-go-sd/),
+   select the ISO, and convert it. The ISO stays on your device. The page can
+   verify the full image before conversion, or convert without that full scan.
+3. Download the install-files ZIP containing `SMG.bin`, `smg_code.xip`, and
+   your generated `smg_assets.xip`. The asset sidecar is also available on its
+   own. The converter processes the ISO in bounded ranges; generating the
+   assets can take several minutes and uses additional memory.
 
-## macOS
+Installation requires a compatible Retro-Go SD profile with GWHB ABI v2 and
+at least 888 bytes of ABI data. Mapped sidecars require correct placement and
+relocation; see the [port build and installation instructions](retro-go-sd/README.md)
+for the GWProv workflow and profile requirements. The separate offline release
+bundle includes the manifest and converter for use with that workflow.
 
-1. Open **Terminal**
-2. Install Apple's developer tools:
+## Build and test
 
-       xcode-select --install
-
-Click **Install** on the opened window
-
-3. Install devkitPro:
-   - Download `devkitpro-pacman-installer.pkg` from https://github.com/devkitPro/pacman/releases/latest and open it. If macOS blocks it, go to **System Settings > Privacy & Security** and click **Open Anyway**.
-   - Then run this command with sudo access:
-
-         sudo dkp-pacman -S gba-dev
-
-4. Open a new terminal to build following the steps below. 
-
-## Windows
-
-We use WSL.
-
-1. Open **Windows PowerShell** and choose **Run as administrator**. Run:
-
-       wsl --install -d Ubuntu
-
-   When it says the changes take effect after a reboot, restart your PC. After the restart, open **Windows PowerShell** as administrator again and run the same command again. Now it should dowload Ubuntu and starts it in that window. Create a default Unix user account (with a password for sudo later).
-
-2. In Ubuntu install the tools:
-
-       sudo apt update
-       sudo apt install -y build-essential python3 curl wget
-
-3. Install devkitPro:
-
-       curl -fsSLO -A "dkp apt" https://apt.devkitpro.org/install-devkitpro-pacman
-       chmod +x install-devkitpro-pacman
-       sudo ./install-devkitpro-pacman
-       sudo dkp-pacman -S gba-dev
-
-4. Close the Ubuntu window and open it again
-
-5. Copy this project folder and your `.iso` into Ubuntu: in Windows Explorer, open `\\wsl$\Ubuntu\home\<your user name>` and copy them there. Maybe don't build from the `C:` drive: it works, but it's a bit slower...
-
-Then build with the building steps below ! :)) 
-
-## Linux (Ubuntu or Debian)
-
-So actually like windows but easier: do steps 2 to 4 of the Windows section in a normal terminal.
-
-## Building
-
-1. Put your game dump into the project folder and rename it`baserom_us.iso`. Windows Explorer hides file extensions, so rename it to just `baserom_us` there (otherwise it becomes `baserom_us.iso.iso`). Or, in Ubuntu: `mv "<your dump>.iso" galaxy-gba/baserom_us.iso`.
-2. In terminal go into the project folder. Type `cd ` drag the project folder into the terminal window and press Enter. On Windows/Ubuntu, if you copied the folder into your home folder as in step 5, type `cd galaxy-gba` instead, using your folder's name.
-3. Start the build:
-
-       make
-
-The first build takes a few minutes. It downloads the disc tool `nodtool` and unpacks your disc, checks that every file it needs matches the original game. Also it constructs assets.
-
-## Disk usage and cleanup
-
-Run these commands from the project root:
+From the repository root, with Docker, Python 3, Make, a host C compiler,
+`arm-none-eabi-objcopy`, and your USA ISO named `baserom_us.iso`:
 
 ```sh
-make disk-usage    # Show the main disk consumers (build/ includes build/perf/).
-make clean-cache   # Remove Rust compiler caches, Ruff cache and Python bytecode.
-make clean-history # Remove performance runs and temporary emulator profiles/captures.
+make build/assets/assets_gen.h
+tools/wasm_converter/build.sh
+make -C retro-go-sd local-bundle
 ```
 
-Stop builds and tests before cleaning caches. The next Rust build recompiles its
-dependencies. `clean-cache` preserves your ISO, extracted disc files, constructed
-assets, generated web WASM modules, Retro-Go bundles, performance evidence in
-`build/perf/`, and emulator profiles and captures in `tmp/`.
+The port README covers the resulting files, installation, release process,
+and current limitations. Run the local CI push gate with:
 
-`clean-history` removes `build/perf/`, `retro-go-sd/build/perf/`, and `tmp/`,
-while keeping the current build outputs and bundles.
+```sh
+sh tools/run_ci.sh
+```
 
-`make clean` removes the entire root `build/` directory, **including performance
-evidence**. `make distclean` also removes downloaded tools and dependency caches
-in `.tools/`. Use these only when you want a full rebuild and have saved any
-evidence you need. The Retro-Go build directory is separate; see
-[its build instructions](retro-go-sd/README.md).
+For disk use and cleanup, `make disk-usage` reports the main consumers;
+`make clean-cache` removes compiler caches, and `make clean-history` removes
+performance runs and temporary profiles. Stop builds and tests first. `make
+clean` removes the root `build/` directory, including its generated assets.
 
-## Come here for help
+## Upstream and development
 
-- **`WSL2 is unable to start since virtualization is not enabled on this machine`** (Windows): turn on virtualization (Intel VT-x / AMD-V / SVM) in your PC's BIOS/UEFI settings, then run `wsl --install -d Ubuntu` again.
-- **`curl: (22) The requested URL returned error: 403`** in the devkitPro step: the devkitPro server blocks plain `curl`. Copy the command exactly as written above, including `-A "dkp apt"`.
-- **`arm-none-eabi-gcc: No such file or directory`**: the GBA compiler isn't installed. Repeat the devkitPro step, then open a new terminal window.
+The original GBA project is [TobiasFriedly/smg-gba](https://github.com/TobiasFriedly/smg-gba).
+The upstream project builds its own GBA target; this fork's supported target
+and development focus are the STM32H7B0 Retro-Go SD port. Port-specific code
+and tooling should stay separate from upstream where practical. Existing shared
+code changes support the port and should be kept as small as practical when
+integrating future upstream work.
 
-
-
-
-Hope it all works:)) 
+See the [port README](retro-go-sd/README.md) for build and installation details
+and the [porting log](PORTING.md) for technical notes and test evidence.

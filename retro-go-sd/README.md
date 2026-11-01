@@ -8,25 +8,31 @@ homebrew only. It does not build or modify Retro-Go firmware.
 
 ## Build and package
 
-Use the vendored SDK builder Docker image:
+From the repository root, with your USA ISO named `baserom_us.iso`, Docker,
+Python 3, Make, a host C compiler, and `arm-none-eabi-objcopy` on your PATH,
+prepare assets and use the vendored SDK builder Docker image:
 
 ```sh
-make docker
-make local-bundle
+make build/assets/assets_gen.h
+tools/wasm_converter/build.sh
+make -C retro-go-sd local-bundle
 ```
 
-`make docker` produces `SMG.bin` and both XIP sidecars. `make local-bundle`
-rebuilds with Docker and writes the standard GWRG manifest and installable ZIP
-to `build/smg/local-bundle/smg-local-bundle.zip`. The ZIP includes the entry
+The `local-bundle` target builds `SMG.bin` and both XIP sidecars with Docker,
+then writes the standard GWRG manifest and installable ZIP
+to `retro-go-sd/build/smg/local-bundle/smg-local-bundle.zip`. The ZIP includes the entry
 binary, mapped code XIP, converter module, symbols, and cover. At install, the
 converter reads the user's verified USA ISO in bounded ranges and produces
-`smg_assets.xip` beside the binary. The opaque asset XIP has no `relocBase`;
+`smg_assets.xip` beside the binary. The [browser converter](https://slash-proc.github.io/smg-retro-go-sd/)
+can also generate the sidecar and offer a ZIP with all three install files;
+that ZIP is distinct from the manifest-based offline bundle. The opaque asset XIP has no `relocBase`;
 the code XIP declares `relocBase: 0xDEC00000`. The homebrew uses
 linker-generated exact relocation sites for asset pointers at runtime.
 
 ## Install and run
 
-Install the bundle into a compatible Retro-Go SD firmware profile with GWProv:
+From `retro-go-sd/`, install the bundle into a compatible Retro-Go SD firmware
+profile with GWProv:
 
 ```sh
 gwprov project install ./build/smg/local-bundle/smg-local-bundle.zip profile:PROFILE \
@@ -55,7 +61,7 @@ Do not build Retro-Go firmware as part of this project.
 The hardware crash investigation found that scanning mapped payloads for
 sentinel words corrupts opaque geometry, sine, pose, and image data. Before
 deploying a local flash profile, reconstruct its mapped payloads at their final
-FrogFS addresses with the preserved sidecars and final ELF:
+FrogFS addresses with the preserved sidecars and final ELF. From `retro-go-sd/`:
 
 ```sh
 # Run using the Python environment where GWProv is installed.
@@ -131,6 +137,8 @@ The release script also checks the manifest against the live distribution
 schema; streaming inputs and exact relocations must be deployed to the spec
 before this release can be published.
 
-The ISO is verified and read in bounded 8 MiB ranges. Total converter memory
-also includes generated assets and compilation; the current 8 MiB build has
-measured approximately 556 MiB of WASM linear memory in browser testing.
+The browser can verify the complete ISO before conversion or convert without
+that full scan. Verification uses a selectable buffer; conversion reads bounded
+8 MiB ranges. Total converter memory also includes generated assets and
+compilation; the current 8 MiB build has measured approximately 556 MiB of WASM
+linear memory in browser testing.
