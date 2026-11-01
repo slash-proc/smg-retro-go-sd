@@ -31,7 +31,7 @@ that ZIP is distinct from the manifest-based offline bundle. The opaque asset XI
 the code XIP declares `relocBase: 0xDEC00000`. The homebrew uses
 linker-generated exact relocation sites for asset pointers at runtime.
 
-## Install and run
+## Developer provisioning and testing
 
 From `retro-go-sd/`, install the bundle into a compatible Retro-Go SD firmware
 profile with GWProv:
@@ -60,8 +60,8 @@ Do not build Retro-Go firmware as part of this project.
 
 ### Local flash profile preparation
 
-The hardware crash investigation found that scanning mapped payloads for
-sentinel words corrupts opaque geometry, sine, pose, and image data. Before
+Scanning mapped payloads for sentinel words corrupts opaque geometry, sine,
+pose, and image data. Before
 deploying a local flash profile, reconstruct its mapped payloads at their final
 FrogFS addresses with the preserved sidecars and final ELF. From `retro-go-sd/`:
 
@@ -95,23 +95,16 @@ per-app settings store. Mapping is independent of the depth-buffer setting;
 neither choice requires a firmware change.
 
 The game has run on real hardware at 30 FPS. Sustained 60 FPS is still a goal;
-headless GWemu tests establish rendering/logic correctness rather than device
-performance. The current Docker build uses 75,120 bytes of RAM code/data,
-602,712 bytes of BSS and 55,248 bytes of ITCM code. Accurate perspective
-mapping now permits bounded 16-pixel spans while keeping the existing
-1/16-texel interpolation error limit. The M7 packed-transform prototype remains
-disabled pending hardware measurement.
-An optional 128 KiB SRAM chunk-table cache preserves a 32 KiB RAM reserve and
-falls back to flash when it cannot fit; the tested VM has 34,808 bytes of
-RAM_EMU remaining after allocation. Its hardware speedup is unmeasured.
+headless GWemu tests establish rendering and logic correctness rather than device
+performance. Accurate texture mapping defaults to bounded 32-pixel spans; the
+renderer tests check the interpolation error against the reference path.
 
 Earlier Chromium, Firefox and GWProv conversion checks verified the USA ISO
 and exact native asset XIP output. Runtime-only changes can use the existing
 converted assets with `scripts/package_native_bundle.py`; they do not require
-another ISO conversion. GWProv pre-caches the homebrew and sidecars. Current
-rendering and collision regressions, accepted-recording replays, and remaining
-performance/quality limitations are documented in the porting log.
-See [porting log](../reference/porting-log.md) for the porting log and test evidence.
+another ISO conversion. GWProv pre-caches the homebrew and sidecars. See
+[architecture](architecture.md) for runtime layout, relocation requirements,
+and the converter protocol.
 
 ## Publishing a release
 

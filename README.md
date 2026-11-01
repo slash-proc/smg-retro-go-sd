@@ -26,13 +26,13 @@ some scenes may run slowly or have visual or gameplay issues.
    needs to run. You can also download the generated asset file separately.
 
 The download is a set of game files. Simply copying the ZIP to an SD card has
-not been verified as an installation method. For the documented GWProv route,
-see [Getting started](docs/getting-started.md); it uses the separate **offline
-bundle** offered on the converter page and your ISO.
+not been verified as an installation method, and a user-friendly installation
+procedure is not yet available. See [Getting started](docs/getting-started.md)
+for the current status.
 
 ## Developers
 
 This fork focuses on the STM32H7B0 port. We aim to keep shared code close to
 [upstream](https://github.com/TobiasFriedly/smg-gba) so future changes are easier
 to incorporate. See the [documentation index](docs/README.md) for the project
-layout, build instructions, release process, and technical history.
+layout, build instructions, testing, and release process.
