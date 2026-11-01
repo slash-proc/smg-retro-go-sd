@@ -110,6 +110,10 @@ static void game_load_stage(int index, int start, int scenario){
     game->selected_mission = selected - 1;
     stage_load_blob(&game->stage, stage_blobs[index]);
     stage_load_far(index);
+#if defined(__GNW__)
+    stage_bind_visibility_cache();
+    stage_bind_home_cache();
+#endif
 
     bool restart =
         game->restart_id >= 0 && index == game->stage_index_loaded && selected == game->scenario_loaded;
@@ -392,6 +396,7 @@ __attribute__((noinline)) static void game_update_frame(fx dt, KeyState keys){
     const int max_ticks = 8;
     while(game->tick_accumulator >= 256 && ticks < max_ticks){
         game->tick_accumulator -= 256;
+        SMG_COUNT(simulation_ticks);
         game->keys = tick_keys;
         game_tick(&tick_keys);
         tick_keys.pressed = 0;
@@ -472,6 +477,56 @@ IWRAM_CODE void vblank_service(void){
     wipe_vblank();
 }
 
+#if defined(__GNW__)
+bool smg_game_get_depth_buffer(void){ return g_depth_enabled; }
+void smg_game_set_depth_buffer(bool enabled){ g_depth_enabled = enabled; }
+bool smg_game_get_perspective(void){ return g_perspective_enabled; }
+void smg_game_set_perspective(bool enabled){ g_perspective_enabled = enabled; }
+
+unsigned smg_game_get_view_mode(void){ return g_game.view_distance; }
+
+void smg_game_set_view_mode(unsigned mode){
+    if(mode < VIEW_MODE_COUNT) g_game.view_distance = mode;
+}
+
+void smg_game_init(void){
+    game_init();
+    for(unsigned i = 0; i < 256; i++) BG_PALETTE[i] = game_palette[i];
+}
+
+bool smg_game_frame(uint16_t buttons, fx dt, uint8_t* framebuffer, bool render){
+    stage_sync_texture_cache();
+    stage_sync_visibility_cache();
+    stage_sync_home_cache();
+    KeyState keys = *(const KeyState*)&g_keys;
+    uint32_t started = smg_perf_now();
+    game_update_frame(dt, keys);
+    smg_perf_add(SMG_PERF_LOGIC, started);
+    g_display_full_res = game_scene(g_game.scene)->full_res;
+    started = smg_perf_now();
+    if(render){
+        SMG_COUNT(rendered_frames);
+        game_draw_frame(framebuffer);
+    }
+    smg_perf_add(SMG_PERF_WORLD, started);
+    audio_vblank();
+    hud_vblank();
+    wipe_vblank();
+    input_finish_frame((KeyState*)&g_keys, buttons, dt);
+    return g_display_full_res != 0;
+}
+
+void smg_game_get_palette(uint32_t out_rgb888[256]){
+    for(unsigned i = 0; i < 256; i++){
+        uint16_t c = BG_PALETTE[i];
+        uint8_t r = c & 31, g = (c >> 5) & 31, b = (c >> 10) & 31;
+        r = (uint8_t)((r << 3) | (r >> 2));
+        g = (uint8_t)((g << 3) | (g >> 2));
+        b = (uint8_t)((b << 3) | (b >> 2));
+        out_rgb888[i] = (uint32_t)r << 16 | (uint32_t)g << 8 | b;
+    }
+}
+#else
 int main(void){
     memory_set_fast_waitstates();
     REG_DISPSTAT = DSTAT_VBL_IRQ;
@@ -514,3 +569,4 @@ int main(void){
         g_frame_had_load = false;
     }
 }
+#endif

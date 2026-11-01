@@ -29,6 +29,10 @@ FRAGMENTS := $(shell find src -name '*.c' -o -name '*.h' -o -name '*.inc')
 ASM       := src/gba/startup.s src/graphics/raster.s src/graphics/visibility_bvh.s \
              src/graphics/visibility_indexed.s src/math/fastmath.s
 
+# Disposable compiler caches; keep generated assets, bundles and test evidence.
+CACHE_DIRS := tools/wasm_converter/target tools/wasm_range_probe/target \
+              $(BUILD)/wasm_converter/stage-galaxy-target .ruff_cache
+
 all: $(BUILD)/galaxy.gba
 
 $(ORIG)/.verified: $(wildcard $(DATA)/*/sources.txt) $(CTOOLS)/dump.py $(CTOOLS)/common.py
@@ -48,7 +52,7 @@ $(CONSTRUCTED)/.done: $(ORIG)/.verified $(shell find $(DATA) $(CTOOLS) assets -t
 $(BUILD)/tools/asset_compiler: $(wildcard tools/asset_compiler/*) src/assets/asset_format.h \
                           $(CONSTRUCTED)/.done
 	@mkdir -p $(@D)
-	$(HOSTCC) $(HOSTFLAGS) -I$(CONSTRUCTED)/tools/asset_compiler -o $@ $(filter %.c,$^) -lm
+	$(HOSTCC) $(HOSTFLAGS) -I$(CONSTRUCTED)/tools/asset_compiler -o $@ $(filter-out tools/asset_compiler/wasm_%.c,$(filter %.c,$^)) -lm
 
 $(BUILD)/tools/pose_anchor_costs: tools/assets/pose_anchor_costs.c
 	@mkdir -p $(@D)
@@ -87,7 +91,20 @@ $(BUILD)/galaxy.gba: $(BUILD)/game.elf
 clean:
 	rm -rf $(BUILD)
 
+clean-cache:
+	rm -rf $(CACHE_DIRS)
+	find tools retro-go-sd/scripts -type d -name __pycache__ -prune -exec rm -rf {} +
+
+clean-history:
+	rm -rf $(BUILD)/perf retro-go-sd/build/perf tmp
+
+disk-usage:
+	@for path in $(BUILD) tmp .tools retro-go-sd/build tools/wasm_converter/target \
+	    tools/wasm_range_probe/target baserom_us.iso; do \
+	    if [ -e "$$path" ]; then du -sh "$$path"; fi; \
+	done
+
 distclean: clean
 	rm -rf .tools
 
-.PHONY: all clean distclean
+.PHONY: all clean clean-cache clean-history disk-usage distclean

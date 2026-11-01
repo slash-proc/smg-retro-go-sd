@@ -22,6 +22,19 @@ typedef struct {
     uint32_t mip[2];
 } TextureReference;
 
+/* Packed far records retain their legacy average in the low byte. An optional
+ * detail payload uses bits8..29 for its aligned source offset divided by four.
+ * Old readers still see the same average; canonical packers build the actual
+ * runtime mip pointers, so runtime code never interprets the source offset. */
+#define FAR_TEXTURE_AVERAGE UINT32_C(0x80000000)
+#define FAR_TEXTURE_DETAIL  UINT32_C(0x40000000)
+static inline int far_texture_has_pixels(uint32_t record){
+    return !(record & FAR_TEXTURE_AVERAGE) || (record & FAR_TEXTURE_DETAIL);
+}
+static inline uint32_t far_texture_source_offset(uint32_t record){
+    return record & FAR_TEXTURE_AVERAGE ? (record & UINT32_C(0x3fffff00)) >> 6 : record;
+}
+
 typedef struct {
     uint16_t point;
     int16_t u, v;
@@ -44,6 +57,7 @@ enum {
 #define TRI_LEDGE_WATER_TINT 8
 #define TRI_SOURCE_ICE 16
 #define TRI_SOURCE_BURN 32
+#define TRI_SOURCE_BLEND_QUARTER 64
 
 typedef struct {
     ModelVertex v[3];
@@ -54,6 +68,9 @@ typedef struct {
 #define STAGE_TEXTURE_MASK 0x3ff
 #define STAGE_MAX_TEXTURE_NUMBERS 1024
 #define TRI_WATER_TINT (1 << 0)
+/* Render-only flag; BuildTriangle uses its source marker in ledges instead
+ * of this bit, which overlaps SURF_DEATH in the separate collision flags. */
+#define TRI_BLEND_QUARTER (1 << 4)
 static inline unsigned stage_triangle_texture(const StageTriangle *t) {
     return t->texture & STAGE_TEXTURE_MASK;
 }

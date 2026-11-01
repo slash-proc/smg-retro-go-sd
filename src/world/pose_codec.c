@@ -1,4 +1,8 @@
+#if defined(__GNW__)
+#define POSE_DECODE_FN __attribute__((noinline, used))
+#else
 #define POSE_DECODE_FN __attribute__((target("arm"), noinline, used, section(".posecodec")))
+#endif
 POSE_DECODE_FN static const int16_t* pose_decode(const uint8_t* descriptor, int16_t* out){
     const PackedPoseHeader* h = (const PackedPoseHeader*)(const void*)descriptor;
     const uint8_t* data = descriptor + sizeof(*h);

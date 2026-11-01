@@ -316,7 +316,7 @@ static void begoman_baby_kill(Actor* b, bool items){
     begoman_baby_retire(b);
 }
 
-static __attribute__((target("arm"), noinline)) bool begoman_baby_sphere_triangle(int tri, v3 centre,
+static GBA_ARM_TARGET_ATTR __attribute__((noinline)) bool begoman_baby_sphere_triangle(int tri, v3 centre,
                                                                                   SphereContact* out){
     const fx radius = 45;
     const CollisionTriangle* t = col_tri(tri);

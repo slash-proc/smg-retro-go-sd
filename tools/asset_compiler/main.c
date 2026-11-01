@@ -15,15 +15,23 @@
 #include <stdio.h>
 #include <string.h>
 
+#ifdef SMG_ASSETC_PROGRESS
+extern void smg_assetc_progress(uint32_t phase, uint32_t index, uint32_t total);
+#define ASSETC_PROGRESS(phase, index, total) smg_assetc_progress(phase, index, total)
+#else
+#define ASSETC_PROGRESS(phase, index, total) ((void)0)
+#endif
+
 static const char *g_in, *g_out;
 static Rgba g_pal[256];
 static uint16_t g_pal15[256];
 static ByteBuffer g_asm, g_hdr;
+static const char *g_asm_section = ".rodata.assets";
 
 static void write_asset_blob(const char *symbol, const char *decl, const void *data, size_t len) {
     write_file(format_string("%s/%s.bin", g_out, symbol), data, len);
-    char *s = format_string("\n    .global %s\n    .balign 4\n%s:\n    .incbin \"%s.bin\"\n", symbol, symbol,
-                            symbol);
+    char *s = format_string("\n    .section %s, \"a\"\n    .global %s\n    .balign 4\n%s:\n    .incbin \"%s.bin\"\n",
+                            g_asm_section, symbol, symbol, symbol);
     buffer_append(&g_asm, s, strlen(s));
     s = format_string("extern const %s;\n", decl);
     buffer_append(&g_hdr, s, strlen(s));
@@ -53,6 +61,10 @@ typedef struct {
     float shading;
     int has_occluder;
     float occluder[3];
+    TextureUnderlay texture_underlays[16];
+    int texture_underlay_count;
+    TextureAlphaPolicy texture_alpha_policies[16];
+    int texture_alpha_policy_count;
 } StageCfg;
 
 typedef struct {
@@ -70,6 +82,8 @@ typedef struct {
     int n_anims;
     int static_texture_dedup;
     int source_zero_faces;
+    TextureAlphaPolicy texture_alpha_policies[16];
+    int texture_alpha_policy_count;
 } FigureCfg;
 
 typedef struct {
@@ -154,6 +168,29 @@ static void parse_manifest(void) {
             fig = NULL;
         } else if (st && !strcmp(t[0], "far") && n == 2) {
             st->far = xstrdup(t[1]);
+        } else if (st && !strcmp(t[0], "texture_underlay") && n == 3) {
+            if (st->texture_underlay_count == 16)
+                die("assets.cfg:%d: too many texture underlays", line_num);
+            for (int i = 0; i < st->texture_underlay_count; i++)
+                if (!strcmp(st->texture_underlays[i].foreground, t[1]))
+                    die("assets.cfg:%d: duplicate texture underlay", line_num);
+            st->texture_underlays[st->texture_underlay_count++] =
+                (TextureUnderlay){ xstrdup(t[1]), xstrdup(t[2]) };
+        } else if ((st || fig) && !strcmp(t[0], "texture_alpha") && n == 3) {
+            TextureAlphaPolicy *policies = st ? st->texture_alpha_policies : fig->texture_alpha_policies;
+            int *count = st ? &st->texture_alpha_policy_count : &fig->texture_alpha_policy_count;
+            if (*count == 16)
+                die("assets.cfg:%d: too many texture alpha policies", line_num);
+            for (int i = 0; i < *count; i++)
+                if (!strcmp(policies[i].texture, t[1]))
+                    die("assets.cfg:%d: duplicate texture alpha policy", line_num);
+            int mode;
+            if (!strcmp(t[2], "opaque")) mode = TEXTURE_ALPHA_OPAQUE;
+            else if (!strcmp(t[2], "coverage")) mode = TEXTURE_ALPHA_COVERAGE;
+            else if (!strcmp(t[2], "blend25") && st) mode = TEXTURE_ALPHA_BLEND_QUARTER;
+            else die("assets.cfg:%d: unknown texture alpha policy '%s'", line_num, t[2]);
+            policies[(*count)++] =
+                (TextureAlphaPolicy){ xstrdup(t[1]), mode };
         } else if (st && !strcmp(t[0], "initial")) {
             st->initial = 1;
         } else if (st && !strcmp(t[0], "underwater")) {
@@ -244,6 +281,10 @@ static void build_palette(void) {
         darken[i] = (uint8_t)palette_nearest_opaque(g_pal, col);
     }
     write_asset_blob("shade_darken", "uint8_t shade_darken[256]", darken, sizeof darken);
+    uint8_t *quarter = xmalloc(65536);
+    palette_build_quarter_blend(quarter, g_pal);
+    write_asset_blob("shade_quarter", "uint8_t shade_quarter[65536]", quarter, 65536);
+    free(quarter);
 
     char *shadow_path = format_string("%s/shadow.png", g_in);
     Texture shadow = texture_from_image(shadow_path, 1, g_pal);
@@ -405,8 +446,11 @@ static uint32_t append_bound_grid(ByteBuffer *b, const GridItem *g, int n, const
     for (size_t i = 0; i < best_blocks.len; i++)
         *(uint16_t *)vec_push(&packed) = VEC_AT(best_blocks, uint16_t, i);
     uint32_t at = buffer_append_aligned(b, &gg, sizeof gg);
-    ((GravityGrid *)(b->data + at))->cells = buffer_append_aligned(b, packed.data, packed.len * 2);
-    ((GravityGrid *)(b->data + at))->lists = buffer_append_aligned(b, lists.data, lists.len * 2);
+    uint32_t cells_offset = buffer_append_aligned(b, packed.data, packed.len * 2);
+    uint32_t entries = buffer_append_aligned(b, lists.data, lists.len * 2);
+    GravityGrid *grid = (GravityGrid *)(b->data + at);
+    grid->cells = cells_offset;
+    grid->lists = entries;
     printf("  %s grid: %dx%dx%d cells of %d, %.1f per cell (longest %ld of %d), %zu list entries, "
            "blocks of %d^3: %zu -> %zu bytes\n", what, dims[0], dims[1], dims[2], 1 << shift,
            (double)total / (double)count_cells, longest, n, lists.len, 1 << best_bs, cells.len * 2,
@@ -555,7 +599,10 @@ static void append_far_textures(ByteBuffer *b, StageHeader *h, const Model *m) {
         uint8_t average = raw[t] ? 0 : far_texture_average(texture);
         uint32_t record;
         if (average) {
-            record = 0x80000000u | average;
+            uint32_t detail = buffer_append_aligned(b, texture, sizeof *texture);
+            if ((detail & 3) || detail >= (1u << 24)) die("far texture detail offset exceeds packed record");
+            record = FAR_TEXTURE_AVERAGE | FAR_TEXTURE_DETAIL | (detail << 6) | average;
+            stored += sizeof *texture;
             packed++;
         } else {
             record = buffer_append_aligned(b, texture, sizeof *texture);
@@ -565,7 +612,7 @@ static void append_far_textures(ByteBuffer *b, StageHeader *h, const Model *m) {
     }
     free(raw);
     h->surface_features |= STAGE_PACKED_FAR_TEXTURES;
-    printf("  far textures: %zu of %zu as average colour, %zu -> %zu bytes\n", packed, n, n * sizeof(Texture),
+    printf("  far textures: %zu of %zu retain average plus detail, %zu -> %zu bytes\n", packed, n, n * sizeof(Texture),
            stored);
 }
 
@@ -640,6 +687,7 @@ static void append_stage_triangles(ByteBuffer *b, StageHeader *h, const Model *m
             die("stage face texture number %u: at most %d per stage", t->texture, STAGE_MAX_TEXTURE_NUMBERS);
         rom[i].texture = (uint16_t)(t->texture | (t->flags & SURF_SCENARIO_MASK));
         rom[i].flags = (uint8_t)((t->flags & (SURF_ANIM_UV | TRI_ALPHA)) |
+                                 (t->ledges & TRI_SOURCE_BLEND_QUARTER ? TRI_BLEND_QUARTER : 0) |
                                  (t->ledges & TRI_LEDGE_WATER_TINT ? TRI_WATER_TINT : 0));
         if (!drawn[i]) continue;
         if (t->water_texture != t->texture) any_water = 1;
@@ -896,16 +944,20 @@ static uint16_t scenario_surface_flag(const Model *m) {
 }
 
 static void build_stage(int index, const StageCfg *cfg, size_t *max_tris, size_t *max_ranks) {
+    ASSETC_PROGRESS(30, 10, (uint32_t)index);
     char *dir = format_string("%s/stages/%s", g_in, cfg->name);
     char *obj = format_string("%s.obj", cfg->name);
     StageExtras extras = stage_extras_load(format_string("%s/%s.stage", dir, cfg->name),
                                            format_string("%s/%s.galaxy", dir, cfg->name));
+    ASSETC_PROGRESS(30, 11, (uint32_t)index);
 
     int shift = model_point_shift(format_string("%s/%s", dir, obj));
+    ASSETC_PROGRESS(30, 12, (uint32_t)index);
     if (cfg->far) {
         int fs = model_point_shift(format_string("%s/%s", dir, cfg->far));
         if (fs > shift) shift = fs;
     }
+    ASSETC_PROGRESS(30, 13, (uint32_t)index);
     float sun_len = sqrtf(0.2f * 0.2f + -0.4f * -0.4f + -1.0f * -1.0f);
 
     int tinted = cfg->has_water || (cfg->underwater && has_water_volumes(cfg->name));
@@ -913,6 +965,10 @@ static void build_stage(int index, const StageCfg *cfg, size_t *max_tris, size_t
     ModelParams p = {
         .dir = dir,
         .obj = obj,
+        .texture_underlays = cfg->texture_underlays,
+        .texture_underlay_count = cfg->texture_underlay_count,
+        .texture_alpha_policies = cfg->texture_alpha_policies,
+        .texture_alpha_policy_count = cfg->texture_alpha_policy_count,
         .shading = cfg->shading,
         .sun = { 0.2f / sun_len, -0.4f / sun_len, -1.0f / sun_len },
         .underwater = cfg->underwater && tinted,
@@ -925,7 +981,9 @@ static void build_stage(int index, const StageCfg *cfg, size_t *max_tris, size_t
     };
     printf("stage %s\n", cfg->name);
     fflush(stdout);
+    ASSETC_PROGRESS(30, 0, (uint32_t)index);
     Model m = model_build(&p, g_pal);
+    ASSETC_PROGRESS(30, 1, (uint32_t)index);
     if (cfg->underwater) tint_faces_in_water(&m, cfg->name, shift);
     if (cfg->water_plane > 0) tint_faces_below_water_plane(&m, cfg->water_plane, shift);
 
@@ -936,6 +994,7 @@ static void build_stage(int index, const StageCfg *cfg, size_t *max_tris, size_t
         fp.occluder = NULL;
         printf("  far LOD %s\n", cfg->far);
         fm = model_build(&fp, g_pal);
+        ASSETC_PROGRESS(30, 2, (uint32_t)index);
         if (cfg->underwater) tint_faces_in_water(&fm, cfg->name, shift);
         if (cfg->water_plane > 0) tint_faces_below_water_plane(&fm, cfg->water_plane, shift);
         if (fm.points.len > STAGE_FAR_POINT_LIMIT)
@@ -973,6 +1032,7 @@ static void build_stage(int index, const StageCfg *cfg, size_t *max_tris, size_t
 
     Vector col_tris, col_nodes;
     collision_build(&m, shift, &col_tris, &col_nodes);
+    ASSETC_PROGRESS(31, 1, (uint32_t)index);
 
     if (!strcmp(cfg->name, "freezeflame") && col_tris.len > 0x7200)
         die("%s: %zu collision triangles, at most 0x7200 (higher IDs belong to ice steps)", cfg->name,
@@ -997,6 +1057,7 @@ static void build_stage(int index, const StageCfg *cfg, size_t *max_tris, size_t
             sky_idx[y * SKY_W + x] = (uint8_t)colormap_nearest_rgb(cmap, p[0], p[1], p[2]);
         }
     h.sky = buffer_append_aligned(&b, sky_idx, SKY_W * SKY_DIM);
+    ASSETC_PROGRESS(31, 2, (uint32_t)index);
 
     Gravity *grav = xcalloc((size_t)extras.gravity_count + 1, sizeof(Gravity));
     for (int i = 0; i < extras.gravity_count; i++) {
@@ -1111,6 +1172,7 @@ static void build_stage(int index, const StageCfg *cfg, size_t *max_tris, size_t
     memcpy(b.data, &h, sizeof h);
     char *sym = format_string("stage_%s", cfg->name);
     write_asset_blob(sym, format_string("uint8_t %s[]", sym), b.data, b.len);
+    ASSETC_PROGRESS(31, 3, (uint32_t)index);
     if (cfg->has_occluder) build_stage_occluder(cfg, &m);
     char *upper = xstrdup(cfg->name);
     for (char *c = upper; *c; c++) *c = (char)toupper((unsigned char)*c);
@@ -1176,6 +1238,8 @@ static void build_figure(const FigureCfg *cfg) {
         .sun = { 0.0f, 0.0f, 1.0f },
         .is_figure = 1,
         .source_zero_faces = cfg->source_zero_faces,
+        .texture_alpha_policies = cfg->texture_alpha_policies,
+        .texture_alpha_policy_count = cfg->texture_alpha_policy_count,
     };
     printf("figure %s\n", cfg->name);
     fflush(stdout);
@@ -1260,11 +1324,12 @@ static void build_figure(const FigureCfg *cfg) {
 
     for (int k = 0; k < 6; k += 2) buffer_append(&b, m.draw_axes[k].data, m.triangles.len * 2);
     char *lod_path = format_string("%s/lod.obj", dir);
-    FILE *lod_file = fopen(lod_path, "r");
+    uint8_t *lod_source = read_file(lod_path, NULL);
+    int has_lod = lod_source != NULL;
     Model ml = { 0 };
     uint16_t *lod_texture_map = NULL;
-    if (lod_file) {
-        fclose(lod_file);
+    if (lod_source) {
+        free(lod_source);
         ModelParams lp = p;
         lp.obj = "lod.obj";
         ml = model_build(&lp, g_pal);
@@ -1285,7 +1350,7 @@ static void build_figure(const FigureCfg *cfg) {
     if (m.textures.len > UINT16_MAX) die("%s: too many merged textures", cfg->name);
     h.texture_count = (uint16_t)m.textures.len;
     h.textures = buffer_append_aligned(&b, m.textures.data, m.textures.len * sizeof(Texture));
-    if (lod_file) {
+    if (has_lod) {
         FigureTriangle *lt = xcalloc(ml.triangles.len, sizeof(FigureTriangle));
         for (size_t i = 0; i < ml.triangles.len; i++) {
             const BuildTriangle *s = &VEC_AT(ml.triangles, BuildTriangle, i);
@@ -1323,7 +1388,7 @@ static void build_figure(const FigureCfg *cfg) {
     if (minus_orders) {
         ByteBuffer mo = { 0 };
         for (int k = 1; k < 6; k += 2) buffer_append(&mo, m.draw_axes[k].data, m.triangles.len * 2);
-        if (lod_file)
+        if (has_lod)
             for (int k = 1; k < 6; k += 2) buffer_append(&mo, ml.draw_axes[k].data, ml.triangles.len * 2);
         char *msym = format_string("draw_minus_orders_%s", cfg->name);
         write_asset_blob(msym, format_string("uint16_t %s[]", msym), mo.data, mo.len);
@@ -1352,6 +1417,19 @@ static void build_sounds(int music) {
     for (int i = 0; i < g_n_sounds; i++) {
         const SoundCfg *cfg = &g_sounds[i];
         if (cfg->is_music != music) continue;
+        if ((i & 15) == 0 || i + 1 == g_n_sounds)
+            ASSETC_PROGRESS(music ? 3 : 4, (uint32_t)i, (uint32_t)g_n_sounds);
+#ifdef ASSETC_NO_AUDIO
+        /* The GWHB runtime currently provides the __GNW__ silent audio
+         * adapter. Keep the stable sound IDs and counts in assets_gen.h, but
+         * do not require ISO-derived PCM inputs or emit sound payloads. The
+         * sound blob macros remain available for targets that use audio. */
+        char *id_upper = xstrdup(cfg->name);
+        for (char *c = id_upper; *c; c++) *c = (char)toupper((unsigned char)*c);
+        append_header("#define %s_%s %d\n", kind, id_upper, count++);
+        free(id_upper);
+        continue;
+#endif
         size_t len;
         char *path = format_string("%s/audio/%s", g_in, cfg->file);
         uint8_t *pcm = read_file(path, &len);
@@ -1448,6 +1526,7 @@ static void build_tables(void) {
 }
 
 int main(int argc, char **argv) {
+    ASSETC_PROGRESS(0, 0, 1);
     if (argc != 3) die("usage: assetc <assets dir> <output dir>");
     g_in = argv[1];
     g_out = argv[2];
@@ -1472,6 +1551,7 @@ int main(int argc, char **argv) {
     for (int i = 0; i < g_n_stages; i++)
         if (g_stages[i].initial) initial = i;
     for (int i = 0; i < g_n_stages; i++) {
+        ASSETC_PROGRESS(1, (uint32_t)i, (uint32_t)g_n_stages);
         build_stage(i, &g_stages[i], &max_tris, &max_ranks);
     }
     append_header("\n#define STAGE_COUNT %d\n#define STAGE_INITIAL %d\n", g_n_stages, initial);
@@ -1505,14 +1585,24 @@ int main(int argc, char **argv) {
     }
     append_header(" }\n\n");
 
-    for (int i = 0; i < g_n_figures; i++) build_figure(&g_figures[i]);
+    for (int i = 0; i < g_n_figures; i++) {
+        if ((i & 7) == 0 || i + 1 == g_n_figures)
+            ASSETC_PROGRESS(2, (uint32_t)i, (uint32_t)g_n_figures);
+        build_figure(&g_figures[i]);
+    }
     append_header("#define FIGURE_SCREEN_POINT_LIMIT %zu\n", (g_max_figure_points + 7) & ~(size_t)7);
     append_header("#define FIGURE_MINUS_ORDER_MODELS%s\n", g_minus_order_models ? g_minus_order_models : "");
+    /* GWHB runs without the GBA audio engine. Keep sound payloads in their
+     * own input section so --gc-sections can omit them from the XIP sidecar
+     * when the target supplies the __GNW__ no-op audio implementation. */
+    g_asm_section = ".rodata.assets.sound";
     build_sounds(1);
     build_sounds(0);
+    g_asm_section = ".rodata.assets";
     printf("effects: %zu near-silent tail samples (|s| <= %d) not stored\n", g_effect_tail_samples,
            SOUND_EFFECT_TAIL_LEVEL);
     for (int i = 0; i < g_n_blobs; i++) {
+        ASSETC_PROGRESS(5, (uint32_t)i, (uint32_t)g_n_blobs);
         size_t len;
         char *path = format_string("%s/%s", g_in, g_blob_files[i]);
         uint8_t *data = read_file(path, &len);
@@ -1525,5 +1615,6 @@ int main(int argc, char **argv) {
     append_header("\n#endif\n");
     write_file(format_string("%s/assets_gen.h", g_out), g_hdr.data, g_hdr.len);
     write_file(format_string("%s/assets.s", g_out), g_asm.data, g_asm.len);
+    ASSETC_PROGRESS(6, 1, 1);
     return 0;
 }

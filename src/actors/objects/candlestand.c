@@ -14,13 +14,16 @@ static inline unsigned div255(unsigned x){
 static unsigned candle_effect_blit(uint8_t* restrict fb, const FFCXTexture* tex, const FFCXFrame* frame,
                                    int x0, int y0, int x1, int y1, bool additive,
                                    const uint8_t rgb5_index[32768], const uint8_t palette[256][3]){
-    if(!frame->alpha || x1 <= x0 || y1 <= y0 || x1 <= 0 || y1 <= 0 || x0 >= 120 || y0 >= 80) return 0;
+    if(!frame->alpha || x1 <= x0 || y1 <= y0 || x1 <= 0 || y1 <= 0 || x0 >= FRAME_WIDTH ||
+       y0 >= FRAME_HEIGHT)
+        return 0;
     uint64_t wide = (uint64_t)((int64_t)x1 - x0), high = (uint64_t)((int64_t)y1 - y0);
 
     if(wide > 16384 || high > 16384 || !tex->width || !tex->height) return 0;
     unsigned w = (unsigned)wide, h = (unsigned)high;
-    int left = x0 < 0 ? 0 : x0, top = y0 < 0 ? 0 : y0, right = x1 > 120 ? 120 : x1,
-        bottom = y1 > 80 ? 80 : y1;
+    int left = x0 < 0 ? 0 : x0, top = y0 < 0 ? 0 : y0,
+        right = x1 > FRAME_WIDTH ? FRAME_WIDTH : x1,
+        bottom = y1 > FRAME_HEIGHT ? FRAME_HEIGHT : y1;
     uint32_t du = ((uint32_t)tex->width << 16) / w, dv = ((uint32_t)tex->height << 16) / h;
     uint32_t v = (uint32_t)(top - y0) * dv;
     unsigned written = 0;

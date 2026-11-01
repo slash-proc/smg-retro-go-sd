@@ -19,5 +19,10 @@ static const ViewMode view_modes[VIEW_MODE_COUNT] = {
 };
 
 static inline const ViewMode* view_mode(void){ return &view_modes[g_game.view_distance]; }
+static inline const ViewMode* view_cinematic_detail(void){
+    /* Full is unbounded main geometry and can overflow during descent.
+     * High plus textured far geometry keeps the whole destination visible. */
+    return &view_modes[1];
+}
 
 static const fx camera_zooms[CAMERA_ZOOM_COUNT] = {FX_ONE, FXC(0.8f), FXC(0.62f), FXC(0.46f)};

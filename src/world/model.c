@@ -12,6 +12,36 @@ static const void* model_keyframe(const FigureHeader* f, int k){
 }
 
 #define POSE_INPUT_BYTES (160 * 3 * 2)
+#if defined(__GNW__)
+#define GNW_POSE_SLOTS 6
+static EWRAM_BSS int16_t g_pose_scratch[GNW_POSE_SLOTS][FIGURE_PACKED_MAX_POINTS * 3];
+static EWRAM_BSS uintptr_t g_pose_cache[GNW_POSE_SLOTS];
+static void model_invalidate_pose_cache(void){
+    for(unsigned i = 0; i < GNW_POSE_SLOTS; i++) g_pose_cache[i] = 0;
+}
+static int16_t* model_pose_scratch(unsigned slot){
+    return g_pose_scratch[slot < GNW_POSE_SLOTS ? slot : GNW_POSE_SLOTS - 1];
+}
+
+static const int16_t* model_decode_pose(const uint8_t* descriptor, unsigned slot){
+    return pose_decode(descriptor, model_pose_scratch(slot));
+}
+
+static const int16_t (*model_resolve_packed(uintptr_t address, unsigned slot))[3]{
+    const uint8_t* descriptor = (const uint8_t*)(address & ~(uintptr_t)FIGURE_POSE_TAG);
+    const PackedPoseHeader* h = (const PackedPoseHeader*)(const void*)descriptor;
+    if(h->mode == FIGURE_POSE_RAW)
+        return (const int16_t (*)[3])(descriptor + sizeof(*h));
+    if(slot >= GNW_POSE_SLOTS) slot = GNW_POSE_SLOTS - 1;
+    /* Slots are live interpolation inputs, not interchangeable cache lines.
+     * Returning old B's slot for new A lets decoding new B overwrite A. */
+    if(g_pose_cache[slot] == address)
+        return (const int16_t (*)[3])g_pose_scratch[slot];
+    const int16_t* decoded = model_decode_pose(descriptor, slot);
+    g_pose_cache[slot] = address;
+    return (const int16_t (*)[3])decoded;
+}
+#else
 static int16_t* model_pose_scratch(unsigned slot){
     if(slot == 4) return (int16_t*)(0x06009300u + 2 * POSE_INPUT_BYTES);
     if(slot == 5) return (int16_t*)0x06013d00u;
@@ -76,6 +106,7 @@ __attribute__((noinline)) static const int16_t (*model_resolve_packed(uintptr_t 
     if(slot == 4) POSE_KEY_CACHE[6] = h->point_count;
     return (const int16_t (*)[3])decoded;
 }
+#endif
 
 static inline const int16_t (*model_resolve_pose(const void* pose, unsigned slot))[3] {
     uintptr_t address = (uintptr_t)pose;

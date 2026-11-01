@@ -1,4 +1,4 @@
-enum { RM_FLAT, RM_TEX, RM_ALPHA, RM_ADD, RM_DARKEN, RM_TINT };
+enum { RM_FLAT, RM_TEX, RM_ALPHA, RM_ADD, RM_DARKEN, RM_TINT, RM_BLEND_QUARTER };
 
 typedef struct {
     uint16_t next;

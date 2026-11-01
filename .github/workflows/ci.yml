@@ -1,0 +1,19 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  runtime-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build runtime test image
+        run: docker build -t smg-runtime-tests -f tools/tests/Dockerfile .
+      - name: Run runtime and tooling checks
+        run: |
+          mkdir -p tmp
+          sudo chown 1000 "${GITHUB_WORKSPACE}/tmp"
+          sudo setpriv --reuid 1000 --regid "$(stat -c %g /var/run/docker.sock)" --clear-groups sh tools/run_ci.sh

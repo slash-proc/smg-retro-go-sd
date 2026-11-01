@@ -1,4 +1,7 @@
 #include "common.h"
+#ifdef SMG_ASSETC_MEMORY_FS
+#include "wasm_vfs.h"
+#endif
 
 #include <math.h>
 #include <stdarg.h>
@@ -6,6 +9,14 @@
 #include <string.h>
 
 void die(const char *fmt, ...) {
+#ifdef SMG_ASSETC_MEMORY_FS
+    char message[512];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(message, sizeof message, fmt, ap);
+    va_end(ap);
+    smg_assetc_fail(message);
+#else
     va_list ap;
     va_start(ap, fmt);
     fputs("assetc: ", stderr);
@@ -13,7 +24,21 @@ void die(const char *fmt, ...) {
     fputc('\n', stderr);
     va_end(ap);
     exit(1);
+#endif
 }
+
+#ifdef SMG_ASSETC_MEMORY_FS
+int printf(const char *fmt, ...) {
+    (void)fmt;
+    return 0;
+}
+
+int smg_assetc_fprintf(FILE *stream, const char *fmt, ...) {
+    (void)stream;
+    (void)fmt;
+    return 0;
+}
+#endif
 
 void *xmalloc(size_t n) {
     void *p = malloc(n ? n : 1);
@@ -51,6 +76,9 @@ char *format_string(const char *fmt, ...) {
 }
 
 uint8_t *read_file(const char *path, size_t *len) {
+#ifdef SMG_ASSETC_MEMORY_FS
+    return smg_assetc_vfs_read(path, len);
+#else
     FILE *f = fopen(path, "rb");
     if (!f) return NULL;
     fseek(f, 0, SEEK_END);
@@ -62,13 +90,18 @@ uint8_t *read_file(const char *path, size_t *len) {
     data[n] = 0;
     if (len) *len = (size_t)n;
     return data;
+#endif
 }
 
 void write_file(const char *path, const void *data, size_t len) {
+#ifdef SMG_ASSETC_MEMORY_FS
+    smg_assetc_vfs_write(path, data, len);
+#else
     FILE *f = fopen(path, "wb");
     if (!f) die("cannot write %s", path);
     if (fwrite(data, 1, len, f) != len) die("cannot write %s", path);
     fclose(f);
+#endif
 }
 
 void vec_reserve(Vector *v, size_t n) {

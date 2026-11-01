@@ -4,6 +4,21 @@
 #define DMA_32        0x04000000u
 #define DMA_SRC_FIXED 0x01000000u
 
+#if defined(__GNW__)
+#include <string.h>
+
+static inline void dma3_copy32(void* dst, const void* src, uint32_t words){
+    memcpy(dst, src, (size_t)words * 4);
+}
+
+static inline void dma3_fill32(void* dst, const volatile uint32_t* value, uint32_t words){
+    uint32_t fill = *value;
+    uint32_t* out = dst;
+    while(words--) *out++ = fill;
+}
+
+static void memory_set_fast_waitstates(void){}
+#else
 static inline void dma3_copy32(void* dst, const void* src, uint32_t words){
     REG_DMA3SAD = (uint32_t)src;
     REG_DMA3DAD = (uint32_t)dst;
@@ -31,3 +46,4 @@ static void memory_set_fast_waitstates(void){
             break;
         }
 }
+#endif

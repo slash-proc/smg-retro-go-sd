@@ -716,7 +716,7 @@ static void mario_ground_move(const KeyState* keys){
     if(m->stick && !m->turn_ready) m->last_dir = m->move_dir;
 }
 
-static __attribute__((target("arm"), noinline)) void mario_begoma_air_control(void){
+static GBA_ARM_TARGET_ATTR __attribute__((noinline)) void mario_begoma_air_control(void){
     MarioPhysics* m = &g_mario;
     Player* p = &g_game.player;
     int32_t vs = vertical_speed(m->jump_vec, p->up);
@@ -899,10 +899,10 @@ static void mario_move_and_collide(v3 displacement, bool want_ground){
     v3 to = v3_sub(feet, v3_scale14(up, snap + margin));
     RayHit hit;
     bool landed = false;
-    if(!rising &&
-       (drop > C_STEP_HEIGHT ? collision_ray(from, to, &hit, 0)
-                             : collision_raycast(&cand, from, to, &hit, 0)) &&
-       v3_dot14(hit.normal, up) >= R14(0.17f)){
+    bool ground_hit = !rising &&
+        (drop > C_STEP_HEIGHT ? collision_ray(from, to, &hit, 0)
+                             : collision_raycast(&cand, from, to, &hit, 0));
+    if(ground_hit && v3_dot14(hit.normal, up) >= R14(0.17f)){
         landed = true;
         feet = hit.point;
         p->ground_normal = hit.normal;
@@ -915,6 +915,14 @@ static void mario_move_and_collide(v3 displacement, bool want_ground){
         }
     }
 
+#if defined(__GNW__)
+    if(p->on_ground && !landed && !rising){
+        /* Large drops use a separate ray broad phase. Recreate only that
+         * exceptional query for the trace; ordinary steps reuse body candidates. */
+        if(drop > C_STEP_HEIGHT) collision_gather_around(from, to, FXC(0.05f), &cand);
+        collision_record_support_loss(old_feet, feet, up, from, to, &cand, ground_hit, &hit);
+    }
+#endif
     if(landed){
         p->has_floor_below = true;
         p->floor_point = feet;

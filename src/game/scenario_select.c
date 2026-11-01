@@ -547,7 +547,7 @@ static void scenario_select_draw(uint8_t* framebuffer){
     int x = (SS_SKY_X0_16 - SS_SKY_DX_16 * t / 4000) >> 4, y = (SS_SKY_Y0_16 - SS_SKY_DY_16 * t / 4000) >> 4;
     x &= ~1;
     if(x < 0) x = 0;
-    if(x > SS_SKY_W - 240) x = SS_SKY_W - 240;
+    if(x > SS_SKY_W - FRAME_WIDTH) x = SS_SKY_W - FRAME_WIDTH;
     if(y < 0) y = 0;
     if(y > SS_SKY_H - FRAME_HEIGHT) y = SS_SKY_H - FRAME_HEIGHT;
 
@@ -755,6 +755,9 @@ static void scenario_select_set_fade(Game* game){
     if(game->scene == SCENE_MISSION_SELECT){
         ss_write_band_palette();
         hud_set_fade(mine, g_screen_fade.white);
+#ifndef __GNW__
+        /* These effects use GBA blending hardware. Like hud_set_fade(),
+         * leave them disabled until the software compositor implements them. */
         int band = ss_band_level();
         if(screen_fade_level() == 0 && g_ss.comet && g_ss.nerve >= SCENARIO_SELECT_COMET_APPEAR &&
            g_ss.nerve <= SCENARIO_SELECT_COMET_END){
@@ -777,6 +780,7 @@ static void scenario_select_set_fade(Game* game){
             evb -= evb * mine / 16;
         }
         REG_BLDALPHA = (uint16_t)(eva | evb << 8);
+#endif
         return;
     }
     if(g_ss.vram) ss_close();

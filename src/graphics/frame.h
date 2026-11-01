@@ -1,6 +1,4 @@
-#define FRAME_WIDTH  120
-#define FRAME_HEIGHT 80
-#define FRAME_STRIDE 240
+#include "frame_dimensions.h"
 #define VIEW_CLIP_X  1648
 #define VIEW_CLIP_Y  2472
 

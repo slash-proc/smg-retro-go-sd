@@ -1,4 +1,11 @@
-#define MAX_POINTS              4096
+#ifndef SMG_POINT_CAPACITY
+#if defined(__GNW__)
+#define SMG_POINT_CAPACITY 5120
+#else
+#define SMG_POINT_CAPACITY 4096
+#endif
+#endif
+#define MAX_POINTS              SMG_POINT_CAPACITY
 #define BIN_COUNT               128
 #define BIN_END                 0xFFFF
 #define MAX_TRIANGLE_DEPTH_SPAN FXC(4.0f)
@@ -10,7 +17,16 @@ typedef struct {
     uint16_t pad;
 } FramePoint;
 
-#define MAX_VISIBLE_TRIANGLES 4096
+#ifndef SMG_VISIBLE_CAPACITY
+#if defined(__GNW__)
+#define SMG_VISIBLE_CAPACITY 8192
+#else
+#define SMG_VISIBLE_CAPACITY 4096
+#endif
+#endif
+#define MAX_VISIBLE_TRIANGLES SMG_VISIBLE_CAPACITY
+_Static_assert(SMG_POINT_CAPACITY < 65536 && SMG_VISIBLE_CAPACITY < 65536,
+               "geometry indices must fit in uint16_t");
 
 #define VISIBLE_CAP   (STAGE_MAX_TRIS < MAX_VISIBLE_TRIANGLES ? STAGE_MAX_TRIS : MAX_VISIBLE_TRIANGLES)
 #define DIRECT_POINTS (STAGE_MAX_POINTS < STAGE_DIRECT_POINTS ? STAGE_MAX_POINTS : STAGE_DIRECT_POINTS)
@@ -20,6 +36,8 @@ typedef struct {
 
 #define FAR_POINTS_RESERVE g_far_reserve
 
+/* The culler reads this descriptor in place and publishes leaf_count after
+ * traversal. Its leaves output storage must not overlap the descriptor. */
 typedef struct {
     const StageChunk* chunks;
     uint32_t n;
@@ -57,6 +75,12 @@ extern const uint32_t geometry_collect_leaves_end[], __iwram_start[], __iwram_lm
 extern const uint32_t __visibility_overlay_start[], __visibility_overlay_end[];
 extern const uint32_t __visibility_direct_overlay_start[], __visibility_direct_overlay_end[];
 
+#if defined(__GNW__) && defined(SMG_PARTIAL_CHUNK_CACHE) && SMG_PARTIAL_CHUNK_CACHE
+void smg_visibility_set_partial_chunk_cache(void* memory, uint32_t bytes,
+                                             const StageChunk* main_source, uint32_t main_count,
+                                             const StageChunk* far_source, uint32_t far_count);
+#endif
+
 typedef struct {
     const uint16_t* visible;
     int32_t n;
@@ -70,6 +94,9 @@ typedef struct {
     uint16_t* plist;
     uint32_t next_slot;
     uint32_t slot_limit;
+#if defined(__GNW__)
+    uint32_t slot_fast_limit;
+#endif
 } ClaimJob;
 
 typedef struct {
@@ -99,6 +126,7 @@ static EWRAM_BSS Figure* g_figure_bin_heads[BIN_COUNT];
 static uint8_t g_point_stamp;
 static int g_point_count, g_farthest_visible_bin;
 
+void smg_visibility_init(void);
 static void* geometry_point_scratch(void);
 IWRAM_CODE static int depth_bin_for_z(fx z);
 int geometry_cull_chunks(CullJob* job);

@@ -68,6 +68,44 @@ static float wrap_texture_coord(float x) {
     return r < 0.0f ? r + 1.0f : r;
 }
 
+/* Translate an entire face by whole texture periods before narrowing. This
+ * preserves every quantized gradient and sample modulo512; wrapping/clamping
+ * vertices independently changes interpolation. Leave one period of headroom
+ * for the runtime's signed animated-UV offset. */
+static void model_triangle_uvs(ModelVertex out[3], const float uv[3][2]) {
+    for (int axis = 0; axis < 2; axis++) {
+        int32_t raw[3];
+        for (int i = 0; i < 3; i++) {
+            if (!isfinite(uv[i][axis]) || fabsf(uv[i][axis]) > 1000000.0f)
+                die("nonfinite or excessive model UV");
+            raw[i] = float_to_i32_saturated(uv[i][axis] * 512.0f);
+        }
+        int32_t lo = raw[0], hi = raw[0];
+        for (int i = 1; i < 3; i++) {
+            if (raw[i] < lo) lo = raw[i];
+            if (raw[i] > hi) hi = raw[i];
+        }
+        const int32_t minimum = INT16_MIN + 512, maximum = INT16_MAX - 512;
+        int64_t shift = 0;
+        if (lo < minimum || hi > maximum) {
+            int64_t low_shift = (int64_t)hi - maximum;
+            int64_t high_shift = (int64_t)lo - minimum;
+            int64_t first = low_shift / 512 + (low_shift % 512 > 0);
+            int64_t last = high_shift / 512 - (high_shift % 512 < 0);
+            if (first > last) die("triangle UV span exceeds signed16 storage");
+            int64_t periods = ((int64_t)lo + hi) / 1024;
+            if (periods < first) periods = first;
+            if (periods > last) periods = last;
+            shift = periods * 512;
+        }
+        for (int i = 0; i < 3; i++) {
+            int16_t value = (int16_t)(raw[i] - shift);
+            if (axis == 0) out[i].u = value;
+            else out[i].v = value;
+        }
+    }
+}
+
 static const uint8_t *texture_pixel_at(const Image *img, int x, int y) {
     uint32_t u = float_to_u32_saturated(wrap_texture_coord((float)x / 32.0f) * (float)img->w);
     uint32_t v = float_to_u32_saturated(wrap_texture_coord((float)y / 32.0f) * (float)img->h);
@@ -154,7 +192,7 @@ Texture texture_from_image(const char *path, int mip1_radius, const Rgba *palett
 typedef struct {
     char *file;
     uint32_t level;
-    int texture, water_texture, alpha;
+    int texture, water_texture, alpha, blend_quarter;
 } TexEntry;
 
 typedef struct {
@@ -182,6 +220,38 @@ static int texture_cache_append(TexCache *tc, const Texture *texture) {
     return index;
 }
 
+/* Some simplified surfaces replace the backing mesh with an alpha decal.
+ * Bake an explicitly configured opaque backing at the same UVs before mip
+ * generation; this costs no extra triangles or runtime blending. */
+static void texture_apply_underlay(Image *foreground, const Image *background) {
+    if (foreground->w != background->w || foreground->h != background->h)
+        die("texture underlay dimensions must match the foreground");
+    for (size_t i = 0; i < (size_t)foreground->w * foreground->h; i++) {
+        uint8_t *f = foreground->rgba + 4 * i;
+        const uint8_t *b = background->rgba + 4 * i;
+        if (b[3] != 255) die("texture underlay must be opaque");
+        unsigned alpha = f[3];
+        for (int c = 0; c < 3; c++)
+            f[c] = (f[c] * alpha + b[c] * (255 - alpha) + 127) / 255;
+        f[3] = 255;
+    }
+}
+
+/* Resolve named material semantics at the compiler's final sampling grid.
+ * Keep reconstructed PNGs/palette inputs unchanged: recipes have residuals
+ * against those exact pixels. Native and WASM use this same compiler. */
+static void texture_apply_alpha_policy(Image *image, int mode) {
+    static const uint8_t bayer[16] = { 0,8,2,10, 12,4,14,6, 3,11,1,9, 15,7,13,5 };
+    for (int y = 0; y < image->h; y++) for (int x = 0; x < image->w; x++) {
+        uint8_t *alpha = image->rgba + ((size_t)y * image->w + x) * 4 + 3;
+        if (mode == TEXTURE_ALPHA_OPAQUE || mode == TEXTURE_ALPHA_BLEND_QUARTER) *alpha = 255;
+        else if (mode == TEXTURE_ALPHA_COVERAGE) {
+            unsigned rank = bayer[((y & 3) << 2) | (x & 3)];
+            *alpha = (unsigned)*alpha * 32 >= (2 * rank + 1) * 255 ? 255 : 0;
+        } else die("invalid texture alpha policy");
+    }
+}
+
 static const TexEntry *texture_cache_get_lit(TexCache *tc, const char *material, float intensity) {
     const char *name = mtl_texture(tc->mtl, material);
     if (!name) return NULL;
@@ -204,12 +274,30 @@ static const TexEntry *texture_cache_get_lit(TexCache *tc, const char *material,
         ImgEntry *ie = vec_push(&tc->images);
         ie->file = xstrdup(file);
         ie->img = png_load(file);
+        for (int i = 0; i < tc->p->texture_alpha_policy_count; i++) {
+            const TextureAlphaPolicy *policy = &tc->p->texture_alpha_policies[i];
+            if (!strcmp(name, policy->texture)) texture_apply_alpha_policy(&ie->img, policy->mode);
+        }
+        for (int i = 0; i < tc->p->texture_underlay_count; i++) {
+            const TextureUnderlay *layer = &tc->p->texture_underlays[i];
+            if (strcmp(name, layer->foreground)) continue;
+            char *base_file = format_string("%s/%s", tc->p->dir, layer->background);
+            Image base = png_load(base_file);
+            texture_apply_underlay(&ie->img, &base);
+            image_free(&base);
+            free(base_file);
+        }
         img = &ie->img;
     }
 
     TexEntry *e = vec_push(&tc->entries);
     e->file = file;
     e->level = level;
+    for (int i = 0; i < tc->p->texture_alpha_policy_count; i++) {
+        const TextureAlphaPolicy *policy = &tc->p->texture_alpha_policies[i];
+        if (!strcmp(name, policy->texture) && policy->mode == TEXTURE_ALPHA_BLEND_QUARTER)
+            e->blend_quarter = 1;
+    }
     Texture texture;
     texture_build_mip(texture.mip[0], img, 0, intensity, 0, &e->alpha, tc->pal);
     texture_build_mip1(texture.mip[1], img, intensity, 0, &e->alpha, tc->pal);
@@ -569,10 +657,11 @@ static void append_triangle(Vector *triangles, Vector *source_codes, const Model
     memcpy(t->normal, normal, sizeof t->normal);
     t->texture = texture ? (uint16_t)texture->texture : 0;
     t->water_texture = texture ? (uint16_t)texture->water_texture : 0;
-    t->flags = ma->surface | (texture && texture->alpha ? TRI_ALPHA : 0);
+    t->flags = ma->surface | (texture && (texture->alpha || texture->blend_quarter) ? TRI_ALPHA : 0);
     t->uv_scroll_speed[0] = uv_scroll_speed[0];
     t->uv_scroll_speed[1] = uv_scroll_speed[1];
     t->ledges = (uint8_t)ledges | (ma->source_ice ? TRI_SOURCE_ICE : 0);
+    if (texture && texture->blend_quarter) t->ledges |= TRI_SOURCE_BLEND_QUARTER;
     if (ma->floor_code == 10) t->ledges |= TRI_SOURCE_BURN;
     *(uint16_t *)vec_push(source_codes) = (uint16_t)(ma->floor_code | ma->wall_code << 8);
 }
@@ -717,11 +806,19 @@ static uint8_t occl_class(const OcclShell *o, V3 a, V3 b, V3 c) {
 }
 
 Model model_build(const ModelParams *p, const Rgba *palette) {
+#ifdef SMG_ASSETC_PROGRESS
+    extern void smg_assetc_progress(uint32_t phase, uint32_t index, uint32_t total);
+#define MODEL_PROGRESS(index, total) do { if (!p->is_figure) smg_assetc_progress(32, (index), (total)); } while (0)
+#else
+#define MODEL_PROGRESS(index, total) ((void)0)
+#endif
+    MODEL_PROGRESS(0, 0);
     char *obj_path = format_string("%s/%s", p->dir, p->obj);
     char *mtl_path = xstrdup(obj_path);
     strcpy(mtl_path + strlen(mtl_path) - 4, ".mtl");
     Obj obj = obj_load(obj_path);
     Mtl mtl = mtl_load(mtl_path);
+    MODEL_PROGRESS(1, 0);
 
     Model m = { 0 };
     m.triangles = VEC(BuildTriangle);
@@ -741,6 +838,7 @@ Model model_build(const ModelParams *p, const Rgba *palette) {
 
     TexCache tc = { p, palette, &mtl, &m, VEC(TexEntry), VEC(ImgEntry) };
     EdgeMap edges = edge_map_build(&obj);
+    MODEL_PROGRESS(2, 0);
     V3 sun = { p->sun[0], p->sun[1], p->sun[2] };
 
     m.leaf_occl = VEC(uint8_t);
@@ -753,6 +851,8 @@ Model model_build(const ModelParams *p, const Rgba *palette) {
         pl[0] = pl[1] = 0;
     }
     for (size_t o = 0; o < obj.objects.len; o++) {
+        if ((o & 15) == 0 || o + 1 == obj.objects.len)
+            MODEL_PROGRESS((uint32_t)o + 3, (uint32_t)obj.objects.len);
         const ObjObject *ob = &VEC_AT(obj.objects, ObjObject, o);
         int first = (int)m.triangles.len;
         int part = 0;
@@ -816,13 +916,14 @@ Model model_build(const ModelParams *p, const Rgba *palette) {
                     if (!ma.invisible) texture = texture_cache_get_lit(&tc, mat, intensity);
                     ModelVertex v[3];
                     const ObjVertex *tv[3] = { &fv[0], &fv[t + 1], &fv[t + 2] };
+                    float face_uv[3][2];
                     for (int i = 0; i < 3; i++) {
                         static const float no_uv[3] = { 0, 0, 0 };
                         const float *uv = tv[i]->uv >= 0 ? OBJ_UV(&obj, tv[i]->uv) : no_uv;
                         v[i].point = (uint16_t)tv[i]->pos;
-                        v[i].u = float_to_i16_saturated(uv[0] * 32.0f * 16.0f);
-                        v[i].v = float_to_i16_saturated(uv[1] * 32.0f * 16.0f);
+                        face_uv[i][0] = uv[0]; face_uv[i][1] = uv[1];
                     }
+                    model_triangle_uvs(v, face_uv);
                     int ledges = 0;
                     if (normal[2] > 128) {
                         for (int i = 0; i < 3; i++)

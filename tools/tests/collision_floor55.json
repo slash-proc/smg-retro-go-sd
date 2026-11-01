@@ -1,0 +1,55 @@
+{
+  "source": "Recorded Observatory support ray; component-wise Q8 cross products reversed an edge sign.",
+  "incidents": [
+    {
+      "sequence": 7,
+      "stage": 0,
+      "from": {
+        "x": -3871,
+        "y": -829,
+        "z": 447
+      },
+      "to": {
+        "x": -3871,
+        "y": -829,
+        "z": 336
+      },
+      "up": {
+        "x": 0,
+        "y": 0,
+        "z": 16384
+      },
+      "candidates": {
+        "index": [
+          51,
+          52,
+          53,
+          54,
+          55,
+          56,
+          57,
+          58,
+          159,
+          160,
+          161,
+          162,
+          191,
+          192,
+          193,
+          194,
+          195,
+          196,
+          197,
+          198,
+          1072,
+          1073,
+          1074,
+          1075
+        ],
+        "count": 24
+      }
+    }
+  ],
+  "expected_floor_triangle": 55,
+  "diagnosis": "Per-component Q8 cross products reverse an edge sign; unrounded 64-bit edge diagnostic succeeds."
+}

@@ -1,8 +1,26 @@
 enum { SD_WAIT = 64, SD_MOVE, SD_DONE };
+#if defined(__GNW__)
+/* Temporary probes for the first GWemu HardFault; remove after diagnosis. */
+volatile uint32_t g_smg_launcher_probe_action;
+volatile uint32_t g_smg_launcher_probe_count;
+volatile uint32_t g_smg_launcher_probe_index;
+volatile uint32_t g_smg_launcher_probe_actor;
+#endif
+
 static Actor* mario_launcher_owner(void){
+#if defined(__GNW__)
+    g_smg_launcher_probe_action = (uint32_t)g_game.player.action;
+    g_smg_launcher_probe_count = (uint32_t)g_game.actor_count;
+    g_smg_launcher_probe_index = UINT32_MAX;
+    g_smg_launcher_probe_actor = 0;
+#endif
     if(g_game.player.action != MA_LAUNCHER_BIND) return NULL;
     for(int i = 0; i < g_game.actor_count; i++){
         Actor* a = &g_game.actors[i];
+#if defined(__GNW__)
+        g_smg_launcher_probe_index = (uint32_t)i;
+        g_smg_launcher_probe_actor = (uint32_t)(uintptr_t)a;
+#endif
         if(a->active && a->type == OBJ_MARIOLAUNCHER && a->state != ML_WAIT && a->state != ML_LAND) return a;
     }
     return NULL;
@@ -340,4 +358,33 @@ __attribute__((noinline)) static bool mario_launcher_gate_draw(
     return true;
 }
 
-static const FigureOps mario_launcher_figure_ops = {.draw = mario_launcher_gate_draw};
+/* All three shutter materials use joint0 and the same transform. Its centre
+ * can leave the view while a panel still spans the screen. Bound every part
+ * before allowing the scene's centre-only cull to discard the whole gate. */
+static fx shutter_gate_radius(const Figure* figure){
+    uint32_t extent = 0;
+    for(unsigned i = 0; i < sizeof shutterdoore_models / sizeof *shutterdoore_models; i++){
+        const FigureHeader* part = (const FigureHeader*)shutterdoore_models[i];
+        if(part->extent > extent) extent = part->extent;
+    }
+    fx scale = fx_max(fx_abs(figure->scale.x),
+                      fx_max(fx_abs(figure->scale.y), fx_abs(figure->scale.z)));
+    /* extent bounds each model axis. 7/4 exceeds sqrt(3); round up and keep
+     * a small margin for the fixed-point basis transform. */
+    return (fx)(((int64_t)extent * scale * 7 + 1023) >> 10) + FX(4);
+}
+
+static fx shutter_gate_draw_extent(const Actor* actor){
+    return shutter_gate_radius(&actor->figure);
+}
+
+__attribute__((noinline)) static bool shutter_gate_view_bounds(
+    const Figure* figure, const CameraView* view){
+    if(figure->model != (const FigureHeader*)shutterdoore_models[0]) return false;
+    return view_sphere_visible(view, figure->position, shutter_gate_radius(figure));
+}
+
+static const FigureOps mario_launcher_figure_ops = {
+    .draw = mario_launcher_gate_draw,
+    .view_bounds = shutter_gate_view_bounds,
+};

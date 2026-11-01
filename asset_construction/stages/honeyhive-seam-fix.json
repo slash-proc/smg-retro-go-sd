@@ -1,0 +1,63 @@
+{
+  "source_archive": "ObjectData/ForestHomePlanet.arc",
+  "source_model": "foresthomeplanet/foresthomeplanet.bdl",
+  "shape": 14,
+  "source_triangles": [
+    4519,
+    4520,
+    4561,
+    4565,
+    4566,
+    4567,
+    4589
+  ],
+  "old_pack_sha256": "9a440d7fc4c9381ad9c2f971c4670977d50a2d07d553b7d341119396ca25a79d",
+  "new_pack_sha256": "c402a81a3e435b71aa73353e38b7c36a1e307a068b5b5c4df2fbcfb530253896",
+  "files": {
+    "honeyhive.obj": {
+      "lines_before": 27674,
+      "lines_after": 27725,
+      "original_bytes": 662547,
+      "original_sha256": "248a8ae8ccd20fef221bebd9978ba751ca04cca92ab4c4b6e8be515cd9a578ad",
+      "result_sha256": "a7b0d8635f5066a2f5e8e8e1ea0ea14febf733bdded9f813fb6361c7c04f5f87",
+      "result_bytes": 664275
+    },
+    "honeyhive_far.obj": {
+      "lines_before": 2576,
+      "lines_after": 2627,
+      "original_bytes": 66991,
+      "original_sha256": "4837d4ad302e04a5776172d642be070a86d8a14f08fa73e981a3a10f88b7b796",
+      "result_sha256": "59d3f1125ea1b961db0aad27ea897fc53634bf071b957559f1765681d956571b",
+      "result_bytes": 68677
+    }
+  },
+  "source_archive_sha256": "37514aeaa8d19228ba1ab3aec8c0a2da68fd3746ae7736624631fbe7fd647a47",
+  "source_object_index": 219,
+  "source_world": {
+    "pos": [
+      30,
+      -1780,
+      -920
+    ],
+    "rot": [
+      0,
+      0,
+      0
+    ],
+    "scale": [
+      1,
+      1,
+      1
+    ]
+  },
+  "object": "ground_seam_restore",
+  "material": "soil",
+  "reason": "Restore the original seven rock faces around the second user-reported Honeyhive wall seam. Three omitted source triangles cover the gap; their one-ring neighbours close the local transition. Original near/far OBJ prefixes are preserved.",
+  "seed_triangles": [
+    4520,
+    4566,
+    4567
+  ],
+  "gap_pixels_before": 248,
+  "gap_pixels_after": 0
+}

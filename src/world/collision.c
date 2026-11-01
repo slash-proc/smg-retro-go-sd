@@ -4,7 +4,37 @@ static uint32_t g_col_parts_hidden;
 static EWRAM_BSS CollisionTriangle g_col_dyn[COL_DYN_MAX];
 static EWRAM_BSS ColDynSet g_col_dyn_sets[COL_DYN_SETS];
 static int g_col_dyn_sets_used, g_col_dyn_used;
+#if defined(__GNW__)
+CollisionIncident smg_collision_incidents[COLLISION_INCIDENTS] EWRAM_BSS;
+volatile uint32_t smg_collision_incident_sequence;
 
+static void collision_record_support_loss(v3 old_feet, v3 feet, v3 up, v3 from, v3 to,
+                                          const CollisionCandidates* candidates,
+                                          bool ground_hit, const RayHit* hit){
+    uint32_t sequence = smg_collision_incident_sequence + 1;
+    CollisionIncident* incident = &smg_collision_incidents[(sequence - 1) % COLLISION_INCIDENTS];
+    incident->sequence = 0;
+    incident->tick = g_game.tick;
+    incident->stage = g_game.stage_index;
+    incident->scenario = g_game.scenario;
+    incident->hidden_parts = g_col_parts_hidden;
+    incident->flags = (ground_hit ? 1u : 0u) | (g_game.player.has_floor_below ? 2u : 0u);
+    incident->old_feet = old_feet;
+    incident->feet = feet;
+    incident->up = up;
+    incident->from = from;
+    incident->to = to;
+    incident->hit_triangle = ground_hit ? hit->tri : -1;
+    incident->hit_t = ground_hit ? hit->t : -1;
+    incident->hit_normal = ground_hit ? hit->normal : V3(0, 0, 0);
+    incident->candidates.count = candidates->count;
+    memcpy(incident->candidates.index, candidates->index,
+           (unsigned)candidates->count * sizeof candidates->index[0]);
+    __asm__ volatile("" ::: "memory");
+    incident->sequence = sequence;
+    smg_collision_incident_sequence = sequence;
+}
+#endif
 __attribute__((noinline)) static const CollisionTriangle* col_face_expand(int i){
     CollisionTriangle* t = &g_icestep_triangle;
     const CollisionFace* f = &g_collision.faces[i];
@@ -103,7 +133,7 @@ IWRAM_FN static void collision_gather(v3 lo, v3 hi, CollisionCandidates* out){
     const CollisionNode* nodes = g_collision.nodes;
     uint32_t n = g_collision.node_count, i = 0;
     int count = 0;
-    while(i < n){
+    while(i < n && count < COL_MAX_CANDIDATES){
         const CollisionNode* node = &nodes[i];
         if(node->min[0] > h0 || node->max[0] < l0 || node->min[1] > h1 || node->max[1] < l1 ||
            node->min[2] > h2 || node->max[2] < l2 ||
@@ -156,6 +186,49 @@ IWRAM_CODE static inline v3 col_ref_vertex(const ColFaceRef* r, int i, v3 origin
 IWRAM_CODE static inline int64_t dot64(v3 a, v3 b){
     return (int64_t)a.x * b.x + (int64_t)a.y * b.y + (int64_t)a.z * b.z;
 }
+
+#if defined(__GNW__)
+/* Only the sign is needed. Keep cross products unrounded: Q8 component
+ * truncation can reverse a near-edge result and reject a real floor hit.
+ * The third vector is the ray direction, not a rounded intersection normal.
+ * Typical local edges fit an int64 sum; a two-limb fallback preserves the
+ * sign even for full signed-32 inputs without overflowing triple products. */
+IWRAM_CODE static int col_ray_edge_sign(v3 a, v3 b, v3 n){
+    int64_t cross[3] = {
+        n.x ? (int64_t)a.y * b.z - (int64_t)a.z * b.y : 0,
+        n.y ? (int64_t)a.z * b.x - (int64_t)a.x * b.z : 0,
+        n.z ? (int64_t)a.x * b.y - (int64_t)a.y * b.x : 0};
+    uint64_t magnitude[3];
+    for(unsigned i = 0; i < 3; i++)
+        magnitude[i] = cross[i] < 0 ? 0 - (uint64_t)cross[i] : (uint64_t)cross[i];
+    uint64_t combined = magnitude[0] | magnitude[1] | magnitude[2];
+    uint32_t normal_size = (n.x < 0 ? 0u - (uint32_t)n.x : (uint32_t)n.x) |
+        (n.y < 0 ? 0u - (uint32_t)n.y : (uint32_t)n.y) |
+        (n.z < 0 ? 0u - (uint32_t)n.z : (uint32_t)n.z);
+    if((!(normal_size >> 15) && !(combined >> 46)) || !(combined >> 30)){
+        int64_t value = cross[0] * n.x + cross[1] * n.y + cross[2] * n.z;
+        return (value > 0) - (value < 0);
+    }
+    const int32_t normal[3] = {n.x, n.y, n.z};
+    uint64_t low = 0;
+    int64_t high = 0;
+    for(unsigned i = 0; i < 3; i++){
+        uint32_t factor = normal[i] < 0 ? 0u - (uint32_t)normal[i] : (uint32_t)normal[i];
+        uint64_t p0 = (uint64_t)(uint32_t)magnitude[i] * factor;
+        uint64_t p1 = (magnitude[i] >> 32) * factor;
+        uint64_t part_low = p0 + (p1 << 32);
+        int64_t part_high = (int64_t)(p1 >> 32) + (part_low < p0);
+        if((cross[i] < 0) != (normal[i] < 0)){
+            part_low = 0 - part_low;
+            part_high = -part_high - (part_low != 0);
+        }
+        uint64_t previous = low;
+        low += part_low;
+        high += part_high + (low < previous);
+    }
+    return high < 0 ? -1 : (high || low ? 1 : 0);
+}
+#endif
 
 IWRAM_CODE static int32_t ratio14(int64_t num, int64_t den){
     if(den <= 0) return 0;
@@ -254,18 +327,32 @@ IWRAM_FN static bool collision_raycast(const CollisionCandidates* cand, v3 from,
         if(t->attr & skip_attr) continue;
         v3 n = v3_from_i16(t->normal);
         v3 a = col_ref_vertex(t, 0, from);
-        fx d0 = -v3_dot14(a, n);
-        fx d1 = d0 + v3_dot14(d, n);
-        if(d0 < 0 || d1 >= 0) continue;
+        /* Preserve signed sub-unit distances until after the crossing test.
+         * Per-component Q14 truncation can turn a point just below a sloping
+         * floor into zero, incorrectly rejecting a valid support ray. The
+         * common normal scale cancels in ratio14(). Include endpoint contact,
+         * but reject coplanar segments rather than reporting arbitrary t=0. */
+        int64_t d0 = -dot64(a, n);
+        int64_t d1 = d0 + dot64(d, n);
+        if(d0 < 0 || d1 > 0 || d0 == d1) continue;
         int32_t tt = ratio14(d0, (int64_t)d0 - d1);
         if(tt >= best) continue;
 
         v3 p = V3((int32_t)(((int64_t)d.x * tt + 8192) >> 14), (int32_t)(((int64_t)d.y * tt + 8192) >> 14),
                   (int32_t)(((int64_t)d.z * tt + 8192) >> 14));
         v3 b = col_ref_vertex(t, 1, from), c = col_ref_vertex(t, 2, from);
+#if defined(__GNW__)
+        /* Oriented volumes test the line against the actual triangle edges.
+         * Rounding p first can move it outside a thin triangle. Crossing and
+         * returned contact remain governed by the existing plane/Q14 rules. */
+        int w0 = col_ray_edge_sign(a, b, d), w1 = col_ray_edge_sign(b, c, d),
+            w2 = col_ray_edge_sign(c, a, d);
+        if(!(w0 || w1 || w2)) continue; /* coplanar line / degenerate face */
+#else
         v3 pa = v3_sub(a, p), pb = v3_sub(b, p), pc = v3_sub(c, p);
         int64_t w0 = dot64(v3_cross(pa, pb), n), w1 = dot64(v3_cross(pb, pc), n),
                 w2 = dot64(v3_cross(pc, pa), n);
+#endif
         if(!((w0 >= 0 && w1 >= 0 && w2 >= 0) || (w0 <= 0 && w1 <= 0 && w2 <= 0))) continue;
         best = tt;
         hit->t = tt;

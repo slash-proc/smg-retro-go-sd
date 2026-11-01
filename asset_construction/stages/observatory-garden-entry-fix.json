@@ -1,0 +1,24 @@
+{
+  "source_sha256": "7c5c92332a970cffe45a6132507c85b35535b0f9df351a6b7d35229545c96f8b",
+  "result_sha256": "63c6f30bbd298978a7130a5f6420bb59a16e586dec1a41a4f79d56de3e5d8dfe",
+  "changed_entries": [
+    "observatory.stage/ln.res",
+    "observatory.stage/native"
+  ],
+  "descriptor_row": 39,
+  "runtime_object": 36,
+  "old": "object dome 0.7521 0.0749 24.0801  0.0000 0.0000 1.0000  0.1908 -0.9816 0.0000 a0=0 a1=6 scen=ff",
+  "corrected": "object dome 2.1407 0.0000 24.6797  0.0000 0.0000 1.0000  0.1908 -0.9816 0.0000 a0=0 a1=6 scen=ff",
+  "old_runtime_position": [
+    192,
+    19,
+    6164
+  ],
+  "corrected_runtime_position": [
+    548,
+    0,
+    6318
+  ],
+  "radius_unchanged": 170,
+  "reason": "Original cube origin used by a fixed sphere misses authored doorway; align existing menu trigger with doorway body height"
+}

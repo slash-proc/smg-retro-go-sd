@@ -8,7 +8,7 @@
 #define DROP_SQUEEZED 8
 #define DROP_BURN     16
 
-__attribute__((target("arm"), always_inline)) static inline v3 collectible_closest_point(
+GBA_ARM_TARGET_ATTR __attribute__((always_inline)) static inline v3 collectible_closest_point(
     v3 a, v3 b, v3 c, v3 projected){
     v3 ab = v3_sub(b, a), ac = v3_sub(c, a);
     int64_t d1 = -dot64(ab, a), d2 = -dot64(ac, a);
@@ -32,7 +32,7 @@ __attribute__((target("arm"), always_inline)) static inline v3 collectible_close
     return projected;
 }
 
-__attribute__((target("arm"), noinline)) static bool collectible_sphere_triangle(
+GBA_ARM_TARGET_ATTR __attribute__((noinline)) static bool collectible_sphere_triangle(
     int tri, v3 centre, fx radius, SphereContact* out){
     const CollisionTriangle* t = col_tri(tri);
     v3 n = v3_from_i16(t->normal);

@@ -1,3 +1,11 @@
+#if defined(__GNW__)
+static volatile bool g_cinematic_detail_enabled = true;
+static volatile bool g_scene_cinematic_detail_active;
+/* Keep actual far texels in gameplay too; old average-only assets retain the
+ * per-material fallback prepared when loading the stage. Debug A/B control. */
+static volatile bool g_far_texture_detail_enabled = true;
+#endif
+
 __attribute__((noinline)) static void scene_clear_words(void* destination, const volatile uint32_t* zero,
                                                         unsigned words){
     uint32_t* output = destination;
@@ -19,7 +27,11 @@ __attribute__((noinline)) static void scene_reset_point_marks(void){
 __attribute__((noinline)) static void scene_far_pass(const CameraView* view, v3 camera_position, int axis,
                                                      const fx* cam_axis, int cut_bin){
     g_far_base = g_point_count;
-    if(g_far_base + (int)g_far_stage.header->point_count > MAX_POINTS) return;
+    if(g_far_base + (int)g_far_stage.header->point_count > MAX_POINTS){
+        SMG_COUNT(far_capacity_skips);
+        return;
+    }
+    SMG_PEAK(point_pool_peak, g_far_base + g_far_stage.header->point_count);
     FramePoint* points = g_frame_points + g_far_base;
     int far_leaves = collect_visible_chunks(&g_far_stage, view, camera_position, 0, cut_bin);
     far_leaves = parts_filter_leaves(g_far_stage.header, g_visible_leaves, far_leaves);
@@ -38,7 +50,11 @@ __attribute__((noinline)) static void scene_far_pass(const CameraView* view, v3 
                    points,
                    g_screen_positions + g_far_base,
                    g_far_stage.textures,
+#if defined(__GNW__)
+                   g_far_texture_detail_enabled ? g_far_detail_average : g_far_texture_average,
+#else
                    g_far_texture_average,
+#endif
                    NULL,
                    NULL,
                    NULL,
@@ -146,6 +162,8 @@ IWRAM_FN static void draw_scene_bins(uint8_t* framebuffer, Game* game, const Cam
 }
 
 __attribute__((noinline)) static void draw_scene(uint8_t* framebuffer, Game* game){
+    uint32_t perf_started = smg_perf_now();
+    engine_depth_begin();
     const Stage* stage = &game->stage;
     CameraView view;
     camera_build_view(&game->camera, &view);
@@ -155,6 +173,16 @@ __attribute__((noinline)) static void draw_scene(uint8_t* framebuffer, Game* gam
     if(g_point_stamp == 1) scene_reset_point_marks();
 
     const ViewMode* mode = view_mode();
+#if defined(__GNW__)
+    /* The destination is the subject: retain bounded main/far geometry, but
+     * use bounded High detail and texture the optional detailed far payloads.
+     * Never replace the user's gameplay setting or force the entire main mesh
+     * into view during the much more demanding arrival flight. */
+    g_scene_cinematic_detail_active = g_cinematic_detail_enabled &&
+        (scenario_intro_playing() ||
+         (game->player.action == MA_STAR_LAUNCH && g_flight.phase == FLIGHT_SHOOT));
+    if(g_scene_cinematic_detail_active) mode = view_cinematic_detail();
+#endif
     int cut_bin = BIN_COUNT - (fx_mul(BIN_COUNT << 8, mode->near) >> 8);
     g_farthest_visible_bin = cut_bin;
     bool far_pass = mode->far && g_has_far_stage;
@@ -169,25 +197,49 @@ __attribute__((noinline)) static void draw_scene(uint8_t* framebuffer, Game* gam
                       camera_position.y,  -camera_position.z, camera_position.z};
 
     const StageHeader* sh = stage->header;
+    int split_reserve = POINTS_SPLIT_RESERVE;
+#if defined(__GNW__)
+    /* The C emitter clips/subdivides on its stack, not in the point pool.
+     * Only the Ocean Bowl disc needs additional pooled scratch (two polygons).
+     * Reserve far vertices only when this view actually renders the far pass. */
+    oceanbowl_begin();
+    split_reserve = g_oceanbowl_split ? 2 * OCEANBOWL_MAX_POINTS : 0;
+    g_far_reserve = far_pass ? (int)g_far_stage.header->point_count + 1 : 0;
+#else
     g_far_reserve = g_has_far_stage ? (int)g_far_stage.header->point_count + 1 : 0;
-    const uint16_t* home = sh->point_home ? (const uint16_t*)((const uint8_t*)sh + sh->point_home) : NULL;
+#endif
+    const uint16_t* home = stage_point_home(stage);
     int triangle_count = collect_visible_triangles(
         stage, leaf_count, axis, -cam_axis[axis], camera_position, &point_count, &pool_used, g_point_marks,
-        home ? MAX_POINTS - POINTS_SPLIT_RESERVE - FAR_POINTS_RESERVE : MAX_POINTS);
+        home ? MAX_POINTS - split_reserve - FAR_POINTS_RESERVE : MAX_POINTS);
+    const int16_t* point_delta = g_leaf_delta;
+#if defined(__GNW__)
+    if(stage_point_slots(stage)){
+        home = stage_point_slots(stage);
+        point_delta = NULL;
+    }
+#endif
+    smg_perf_add(SMG_PERF_VISIBILITY, perf_started);
+    perf_started = smg_perf_now();
     TransformJob transform_job =
         geometry_transform_job(stage->points, g_frame_points, g_screen_positions, g_point_list, point_count,
                                &view.to_screen, stage->point_shift);
     transform_job.home = home;
-    transform_job.delta = g_leaf_delta;
+    transform_job.delta = point_delta;
     engine_transform_points(&transform_job);
+    smg_perf_add(SMG_PERF_TRANSFORM, perf_started);
+    perf_started = smg_perf_now();
 
     for(int i = 0; i < BIN_COUNT; i++){
         g_triangle_bin_heads[i] = BIN_END;
         g_triangle_bin_heads[BIN_COUNT + i] = BIN_END;
         g_figure_bin_heads[i] = NULL;
     }
+#if !defined(__GNW__)
     oceanbowl_begin();
+#endif
     g_point_count = home ? pool_used : (int)sh->point_count;
+    SMG_PEAK(point_pool_peak, g_point_count);
     g_arena_count = 0;
     g_engine_fb = framebuffer;
     int flat_bin = mode->flat_depth == 0x7FFFFFFF ? -1 : depth_bin_for_z(mode->flat_depth);
@@ -200,7 +252,7 @@ __attribute__((noinline)) static void draw_scene(uint8_t* framebuffer, Game* gam
                        g_flat_small || flat_bin >= 0 ? g_texture_average : g_no_average,
                        g_texture_cache_slot,
                        home,
-                       g_leaf_delta,
+                       point_delta,
                        water,
                        stage->points,
                        0,
@@ -221,6 +273,7 @@ __attribute__((noinline)) static void draw_scene(uint8_t* framebuffer, Game* gam
     }
 
     oceanbowl_queue(&view);
+    smg_perf_add(SMG_PERF_EMIT, perf_started);
 
     for(int i = 0; i < game->figure_count; i++){
         Figure* figure = game->figures[i];
@@ -241,4 +294,5 @@ __attribute__((noinline)) static void draw_scene(uint8_t* framebuffer, Game* gam
     }
 
     draw_scene_bins(framebuffer, game, &view, far_pass ? 0 : g_farthest_visible_bin);
+    engine_depth_end();
 }

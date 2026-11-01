@@ -1,7 +1,90 @@
 #include <math.h>
+#ifndef TEXTURES_BAKE_CORE_LIBRARY
 #include <stdio.h>
+#endif
 #include <stdlib.h>
 #include <string.h>
+
+#ifdef TEXTURES_BAKE_CORE_LIBRARY
+/* Freestanding WASM math shims stay internal to this C object; exposing them
+ * from the final module would violate the GWRG processor ABI export surface. */
+float sqrtf(float value) { return __builtin_sqrtf(value); }
+double sqrt(double value) { return __builtin_sqrt(value); }
+float floorf(float value) { return __builtin_floorf(value); }
+float ceilf(float value) { return __builtin_ceilf(value); }
+double floor(double value) { return __builtin_floor(value); }
+double ceil(double value) { return __builtin_ceil(value); }
+float fabsf(float value) { return __builtin_fabsf(value); }
+long lroundf(float value)
+{
+    return value >= 0.0f ? (long)(value + 0.5f) : (long)(value - 0.5f);
+}
+#endif
+
+#ifdef TEXTURES_BAKE_CORE_ARENA
+static unsigned char *core_arena;
+static size_t core_arena_size;
+static size_t core_arena_used;
+static int core_arena_failed;
+
+static void *core_malloc(size_t size)
+{
+    size_t header = 16, start, end;
+    if (!size)
+        size = 1;
+    start = (core_arena_used + 15) & ~(size_t)15;
+    if (start > core_arena_size || header > core_arena_size - start ||
+        size > core_arena_size - start - header) {
+        core_arena_failed = 1;
+        return NULL;
+    }
+    end = start + header + size;
+    memcpy(core_arena + start, &size, sizeof size);
+    core_arena_used = end;
+    return core_arena + start + header;
+}
+
+static void *core_calloc(size_t count, size_t size)
+{
+    if (count && size > (size_t)-1 / count) {
+        core_arena_failed = 1;
+        return NULL;
+    }
+    size_t bytes = count * size;
+    void *ptr = core_malloc(bytes);
+    if (ptr)
+        memset(ptr, 0, bytes);
+    return ptr;
+}
+
+static void *core_realloc(void *ptr, size_t size)
+{
+    if (!ptr)
+        return core_malloc(size);
+    if (!size)
+        return NULL;
+    size_t old_size;
+    unsigned char *p = ptr;
+    memcpy(&old_size, p - 16, sizeof old_size);
+    size_t block_end = (size_t)(p - core_arena) + old_size;
+    if (block_end == core_arena_used && size <= core_arena_size - (size_t)(p - core_arena)) {
+        memcpy(p - 16, &size, sizeof size);
+        core_arena_used = (size_t)(p - core_arena) + size;
+        return ptr;
+    }
+    void *replacement = core_malloc(size);
+    if (replacement)
+        memcpy(replacement, ptr, old_size < size ? old_size : size);
+    return replacement;
+}
+
+static void core_free(void *ptr) { (void)ptr; }
+
+#define malloc core_malloc
+#define calloc core_calloc
+#define realloc core_realloc
+#define free core_free
+#endif
 
 #define FLAG_AA_TABLE 32
 #define FLAG_PARTS 65536
@@ -17,8 +100,45 @@ typedef struct {
     float x, y, z;
 } V3;
 
-static unsigned char *buf;
+static const unsigned char *buf;
 static long bpos;
+static unsigned char *result_buf;
+static size_t result_len;
+static size_t result_cap;
+static int result_failed;
+
+static int result_write(const void *data, size_t size)
+{
+    size_t needed = result_len + size;
+    if (needed < result_len)
+        return 0;
+    if (needed > result_cap) {
+        size_t cap = result_cap ? result_cap : 4096;
+        while (cap < needed) {
+            if (cap > (size_t)-1 / 2) {
+                cap = needed;
+                break;
+            }
+            cap *= 2;
+        }
+        unsigned char *p = realloc(result_buf, cap);
+        if (!p) {
+            result_failed = 1;
+            return 0;
+        }
+        result_buf = p;
+        result_cap = cap;
+    }
+    memcpy(result_buf + result_len, data, size);
+    result_len = needed;
+    return 1;
+}
+#ifndef TEXTURES_BAKE_CORE_LIBRARY
+static unsigned char *owned_buf;
+#endif
+
+#ifndef TEXTURES_BAKE_CORE_LIBRARY
+static const char *native_output_path;
 
 static void load_input(const char *path)
 {
@@ -27,18 +147,20 @@ static void load_input(const char *path)
     fseek(f, 0, SEEK_END);
     n = ftell(f);
     fseek(f, 0, SEEK_SET);
-    buf = malloc(n);
-    if (fread(buf, 1, n, f) != (size_t)n)
+    owned_buf = malloc(n);
+    if (fread(owned_buf, 1, n, f) != (size_t)n)
         exit(2);
     fclose(f);
+    buf = owned_buf;
     bpos = 0;
 }
+#endif
 
 static void write_file(const char *path, const void *data, size_t size)
 {
-    FILE *f = fopen(path, "wb");
-    fwrite(data, 1, size, f);
-    fclose(f);
+    (void)path;
+    if (!result_write(data, size))
+        result_failed = 1;
 }
 
 static int rd_i(void)
@@ -202,7 +324,7 @@ typedef struct {
 
 typedef struct {
     int w, h;
-    unsigned char *px;
+    const unsigned char *px;
 } Tex;
 
 static int nlv, nlt, npoly, nhv, nht, nmat, ntex, W, H, MARGIN, NS, FLAGS;
@@ -1222,7 +1344,7 @@ static int closest_bary2(float px, float py, const float *a, const float *b, con
     return 1;
 }
 
-static void run_parts(const char *out)
+static void run_parts(void)
 {
     int R = W, cut = (FLAGS & FLAG_CUT) != 0;
     float *px = calloc((size_t)R * R * 4, sizeof(float));
@@ -1405,7 +1527,7 @@ static void run_parts(const char *out)
                                                                        : (unsigned char)(255.0f * fv + 0.5f);
             }
         }
-    write_file(out, res, (size_t)h * h * 4);
+    write_file(NULL, res, (size_t)h * h * 4);
     free(res);
     free(px);
     free(qual);
@@ -1430,6 +1552,7 @@ static double tcomb(double a, double b, double c, double d, int op, int bias, in
     return clamp ? tclip(v, 0.0, 1.0) : tclip(v, -4.0, 4.0);
 }
 
+#ifndef TEXTURES_BAKE_CORE_LIBRARY
 static void run_tev(const char *in, const char *out)
 {
     FILE *g;
@@ -1569,8 +1692,10 @@ static void run_tev(const char *in, const char *out)
         free(newa);
     }
     fclose(g);
-    free(buf);
+    free(owned_buf);
+    owned_buf = NULL;
 }
+#endif
 
 static void uv_range(double a, double b, double c, double *lo, double *hi)
 {
@@ -1586,7 +1711,7 @@ static void uv_range(double a, double b, double c, double *lo, double *hi)
         *hi = c;
 }
 
-static void run_reproj(const char *out)
+static void run_reproj(void)
 {
     int Wo = W, Ho = MARGIN;
     const Tex *tx = &texs[0];
@@ -1684,15 +1809,14 @@ static void run_reproj(const char *out)
                 memcpy(res + (row * Wo + xx) * 4, tx->px + (sy * tx->w + sx) * 4, 4);
             }
     }
-    write_file(out, res, (size_t)Wo * Ho * 4);
+    write_file(NULL, res, (size_t)Wo * Ho * 4);
     free(res);
 }
 
-static void run_nearmap(const char *out)
+static void run_nearmap(void)
 {
     int Wo = W, Ho = MARGIN, cnt = 0, cap = 4096;
     float *rec = malloc(sizeof(float) * 5 * cap);
-    FILE *f;
     for (int t = 0; t < nlt; t++) {
         const float *a = &luv[t * 6], *b = &luv[t * 6 + 2], *c = &luv[t * 6 + 4];
         double m[3][3] = { { a[0], b[0], c[0] }, { a[1], b[1], c[1] }, { 1, 1, 1 } }, inv[3][3], det;
@@ -1820,16 +1944,13 @@ static void run_nearmap(const char *out)
                 cnt++;
             }
     }
-    f = fopen(out, "wb");
-    fwrite(&cnt, 4, 1, f);
-    fwrite(rec, sizeof(float), (size_t)cnt * 5, f);
-    fclose(f);
+    write_file(NULL, &cnt, 4);
+    write_file(NULL, rec, sizeof(float) * (size_t)cnt * 5);
     free(rec);
 }
 
-static void run_pnear(const char *out)
+static void run_pnear(void)
 {
-    FILE *f = fopen(out, "wb");
     float md2 = EXT * EXT;
     for (int i = 0; i < nlv; i++) {
         V3 p = lv[i], best = v3(0, 0, 0);
@@ -1850,12 +1971,11 @@ static void run_pnear(const char *out)
                 rec[2] = (float)((d00 * d21 - d01 * d20) / dd);
             }
         }
-        fwrite(rec, sizeof(float), 4, f);
+        write_file(NULL, rec, sizeof rec);
     }
-    fclose(f);
 }
 
-static void run_bake(const char *out)
+static void run_bake(void)
 {
     pix = malloc(sizeof(Pix) * W * H);
     for (int i = 0; i < W * H; i++)
@@ -2003,12 +2123,13 @@ static void run_bake(const char *out)
         margin_adjacent();
     for (int i = 0; i < W * H; i++)
         img[i * 4 + 3] = 255;
-    write_file(out, img, (size_t)W * H * 4);
+    write_file(NULL, img, (size_t)W * H * 4);
 }
 
-static void run(const char *in, const char *out)
+static void run(const unsigned char *input, size_t input_size)
 {
-    load_input(in);
+    buf = input;
+    (void)input_size;
     bpos = 4;
     W = rd_i();
     H = rd_i();
@@ -2130,24 +2251,72 @@ static void run(const char *in, const char *out)
     if (nht)
         build(0, nht);
     if (FLAGS & FLAG_PARTS) {
-        run_parts(out);
+        run_parts();
         return;
     }
     if (FLAGS & FLAG_POINT_NEAR) {
-        run_pnear(out);
+        run_pnear();
         return;
     }
     if (FLAGS & FLAG_NEAR_MAP) {
-        run_nearmap(out);
+        run_nearmap();
         return;
     }
     if (FLAGS & FLAG_REPROJECT) {
-        run_reproj(out);
+        run_reproj();
         return;
     }
-    run_bake(out);
+    run_bake();
 }
 
+#ifdef TEXTURES_BAKE_CORE_LIBRARY
+void textures_bake_core_set_arena(unsigned char *arena, size_t arena_size)
+{
+#ifdef TEXTURES_BAKE_CORE_ARENA
+    core_arena = arena;
+    core_arena_size = arena_size;
+    core_arena_used = 0;
+    core_arena_failed = 0;
+#else
+    (void)arena;
+    (void)arena_size;
+#endif
+    result_buf = NULL;
+    result_len = result_cap = 0;
+    result_failed = 0;
+}
+
+int textures_bake_core_run(const unsigned char *input, size_t input_size)
+{
+    if (!input || input_size < 24)
+        return 1;
+    init_tables();
+    result_len = 0;
+    result_failed = 0;
+    run(input, input_size);
+#ifdef TEXTURES_BAKE_CORE_ARENA
+    return result_failed || core_arena_failed ? 2 : 0;
+#else
+    return result_failed ? 2 : 0;
+#endif
+}
+
+const unsigned char *textures_bake_core_output(void) { return result_buf; }
+size_t textures_bake_core_output_len(void) { return result_len; }
+void textures_bake_core_reset(void)
+{
+#ifndef TEXTURES_BAKE_CORE_ARENA
+    free(result_buf);
+#endif
+    result_buf = NULL;
+    result_len = result_cap = 0;
+    result_failed = 0;
+#ifdef TEXTURES_BAKE_CORE_ARENA
+    core_arena_used = 0;
+    core_arena_failed = 0;
+#endif
+}
+#else
 int main(int argc, char **argv)
 {
     init_tables();
@@ -2157,6 +2326,25 @@ int main(int argc, char **argv)
     }
     if (argc != 3)
         return 1;
-    run(argv[1], argv[2]);
+    load_input(argv[1]);
+    native_output_path = argv[2];
+    run(buf, (size_t)bpos);
+    if (result_failed) {
+        free(owned_buf);
+        free(result_buf);
+        return 2;
+    }
+    FILE *f = fopen(native_output_path, "wb");
+    if (!f || fwrite(result_buf, 1, result_len, f) != result_len) {
+        if (f)
+            fclose(f);
+        free(owned_buf);
+        free(result_buf);
+        return 2;
+    }
+    fclose(f);
+    free(owned_buf);
+    free(result_buf);
     return 0;
 }
+#endif

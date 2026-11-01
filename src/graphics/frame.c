@@ -1,6 +1,18 @@
+#if defined(__GNW__)
+/* Retain the table as a debug A/B reference until hardware timing is available. */
+static volatile bool g_projection_divide_enabled = true;
+#endif
+
 IWRAM_CODE static inline v2 project_to_screen(v3 p){
     uint32_t zi = (uint32_t)(p.z > FXC(0.5f) ? p.z : FXC(0.5f)) >> 2;
-    int32_t r = lut_project[zi > 0xFFFF ? 0xFFFF : zi];
+    if(zi > 0xFFFF) zi = 0xFFFF;
+#if defined(__GNW__)
+    /* Every reachable table entry is exactly floor(2^20 / zi). Keep the
+     * existing z clamp, product shift and screen scaling/rounding unchanged. */
+    int32_t r = g_projection_divide_enabled ? (int32_t)((UINT32_C(1) << 20) / zi) : lut_project[zi];
+#else
+    int32_t r = lut_project[zi];
+#endif
     return V2(((r * p.x) >> 14) * (FRAME_WIDTH / 2) + (FRAME_WIDTH / 2) * FX_ONE,
               ((r * p.y) >> 14) * (FRAME_HEIGHT / 2) + (FRAME_HEIGHT / 2) * FX_ONE);
 }

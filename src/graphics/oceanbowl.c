@@ -187,6 +187,9 @@ __attribute__((noinline)) static void oceanbowl_draw_surface(void){
             p1 = p2;
             p2 = t;
         }
+        const FramePoint* points = g_frame_points + g_oceanbowl.base;
+        engine_set_depth(points[0].position.z, points[area < 0 ? i + 1 : i].position.z,
+                         points[area < 0 ? i : i + 1].position.z);
         engine_out(-1, p0, p1, p2, 0, 0, 0, RM_TINT, 0, NULL);
     }
 }

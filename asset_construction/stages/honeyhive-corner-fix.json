@@ -1,0 +1,67 @@
+{
+  "source_archive": "ObjectData/ForestHomePlanet.arc",
+  "source_model": "foresthomeplanet/foresthomeplanet.bdl",
+  "shape": 14,
+  "source_triangles": [
+    59,
+    60,
+    61,
+    62,
+    63,
+    95,
+    96,
+    97,
+    98,
+    99,
+    100,
+    106,
+    119,
+    136,
+    138,
+    173,
+    174,
+    192
+  ],
+  "old_pack_sha256": "4f7ffbf0a95dba934d67821c955aa580a810f2110a43b6688da8aa0a6f969f62",
+  "new_pack_sha256": "9a440d7fc4c9381ad9c2f971c4670977d50a2d07d553b7d341119396ca25a79d",
+  "files": {
+    "honeyhive.obj": {
+      "lines_before": 27546,
+      "lines_after": 27674,
+      "original_bytes": 658047,
+      "original_sha256": "5cdd300a000efa68b5bc336aaf9846d87c6a8112363772bdcc4e66cfa310d80c",
+      "result_sha256": "248a8ae8ccd20fef221bebd9978ba751ca04cca92ab4c4b6e8be515cd9a578ad",
+      "result_bytes": 662547
+    },
+    "honeyhive_far.obj": {
+      "lines_before": 2448,
+      "lines_after": 2576,
+      "original_bytes": 62599,
+      "original_sha256": "ae9dbc2b1e472239a782ceee353e1397aa048cbff4c92fe0997e99aedc2b3dd6",
+      "result_sha256": "4837d4ad302e04a5776172d642be070a86d8a14f08fa73e981a3a10f88b7b796",
+      "result_bytes": 66991
+    }
+  },
+  "source_archive_sha256": "37514aeaa8d19228ba1ab3aec8c0a2da68fd3746ae7736624631fbe7fd647a47",
+  "source_object_index": 219,
+  "source_world": {
+    "pos": [
+      30,
+      -1780,
+      -920
+    ],
+    "rot": [
+      0,
+      0,
+      0
+    ],
+    "scale": [
+      1,
+      1,
+      1
+    ]
+  },
+  "object": "ground_corner_restore",
+  "material": "soil",
+  "reason": "Restore original rock faces and their one-ring neighbors around the user-reported crevice; append identical source geometry to near and far meshes without altering existing faces or creating a replacement floor."
+}

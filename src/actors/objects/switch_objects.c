@@ -17,9 +17,9 @@ static inline bool switch_object(const StageObject* o){
     return o->type == OBJ_GROUPSWITCHWATCHER || o->type == OBJ_SWITCHSYNCREV ||
            o->type == OBJ_YELLOWCHIPGROUP;
 }
-static void switch_objects_tick(void){
-    const Stage* st = &g_game.stage;
-    uint8_t bit = g_stream.scenario_bit;
+/* Candidate membership is immutable stage data; scenario and object/switch
+ * state are still checked each tick. Preserve source order for dependencies. */
+static bool switch_objects_prepare(const Stage* st){
     uint32_t total = st->header->object_count;
     if(g_switch_objects.objects != st->objects){
         uint32_t n = 0;
@@ -32,7 +32,13 @@ static void switch_objects_tick(void){
         g_switch_objects.objects = st->objects;
         g_switch_objects.count = (uint16_t)n;
     }
-    bool listed = g_switch_objects.count <= sizeof g_switch_objects.index / sizeof g_switch_objects.index[0];
+    return g_switch_objects.count <= sizeof g_switch_objects.index / sizeof g_switch_objects.index[0];
+}
+static void switch_objects_tick(void){
+    const Stage* st = &g_game.stage;
+    uint8_t bit = g_stream.scenario_bit;
+    uint32_t total = st->header->object_count;
+    bool listed = switch_objects_prepare(st);
     for(uint32_t j = 0; j < (listed ? g_switch_objects.count : total); j++){
         uint32_t i = listed ? g_switch_objects.index[j] : j;
         const StageObject* o = &st->objects[i];
@@ -77,7 +83,10 @@ static void switch_objects_tick(void){
 
 static void group_switch_objects_tick(void){
     const Stage* stage = &g_game.stage;
-    for(uint32_t i = 0; i < stage->header->object_count; i++){
+    bool listed = switch_objects_prepare(stage);
+    uint32_t total = listed ? g_switch_objects.count : stage->header->object_count;
+    for(uint32_t j = 0; j < total; j++){
+        uint32_t i = listed ? g_switch_objects.index[j] : j;
         const StageObject* o = &stage->objects[i];
         if(o->type != OBJ_GROUPSWITCHWATCHER || (g_object_state[i] & OBJECT_STATE_GONE)) continue;
         if(o->scenarios != 0xFF && !(o->scenarios & g_stream.scenario_bit)) continue;

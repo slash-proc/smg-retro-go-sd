@@ -8,6 +8,7 @@ typedef struct {
 } Rgba;
 
 int palette_nearest_opaque(const Rgba *pal, const float col[3]);
+void palette_build_quarter_blend(uint8_t out[65536], const Rgba pal[256]);
 
 typedef struct ColorMap ColorMap;
 ColorMap *colormap_create(const Rgba *pal, int n);

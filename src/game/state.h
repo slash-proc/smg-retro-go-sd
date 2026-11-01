@@ -85,3 +85,4 @@ static uint16_t g_debug_options EWRAM_BSS;
 static const fx camera_zooms[CAMERA_ZOOM_COUNT];
 
 static inline const ViewMode* view_mode(void);
+static inline const ViewMode* view_cinematic_detail(void);

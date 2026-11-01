@@ -1,4 +1,8 @@
-#define OAM         ((volatile uint16_t*)0x07000000)
+#if defined(__GNW__)
+volatile uint16_t smg_obj_tiles[512 * 16] EWRAM_BSS;
+volatile uint16_t smg_obj_palette[256] EWRAM_BSS;
+volatile uint16_t smg_obj_oam[128 * 4] EWRAM_BSS;
+#endif
 
 static const uint16_t slot_base[SLOT_COUNT] = {HUD_STATIC_TILES, HUD_STATIC_TILES + 64,
                                                HUD_STATIC_TILES + 128};
@@ -98,19 +102,124 @@ static void hud_end(void){
 
 IWRAM_CODE void hud_vblank(void){
     if(!g_oam_ready) return;
+#if defined(__GNW__)
+    for(int i = 0; i < 128 * 4; i++) OAM[i] = ((const uint16_t*)g_oam)[i];
+#else
     volatile uint32_t* dst = (volatile uint32_t*)OAM;
     const uint32_t* src = (const uint32_t*)g_oam;
     for(int i = 0; i < 256; i++) dst[i] = src[i];
+#endif
     g_oam_ready = 0;
 }
 
+#if defined(__GNW__)
+static void smg_obj_dimensions(unsigned shape, unsigned size, int* width, int* height){
+    static const uint8_t dimensions[3][4][2] = {
+        {{8, 8}, {16, 16}, {32, 32}, {64, 64}},
+        {{16, 8}, {32, 8}, {32, 16}, {64, 32}},
+        {{8, 16}, {8, 32}, {16, 32}, {32, 64}},
+    };
+    if(shape >= 3 || size >= 4){
+        *width = *height = 0;
+        return;
+    }
+    *width = dimensions[shape][size][0];
+    *height = dimensions[shape][size][1];
+}
+
+static uint16_t smg_obj_rgb565(unsigned index){
+    uint16_t c = smg_obj_palette[index & 255];
+    unsigned r = c & 31, g = (c >> 5) & 31, b = (c >> 10) & 31;
+    return (uint16_t)((r << 11) | (g << 6) | (b << 1));
+}
+
+static unsigned smg_obj_pixel(unsigned tile, int x, int y, int width){
+    unsigned tiles_per_row = (unsigned)width / 8;
+    unsigned tile_offset = tile + (unsigned)(y / 8) * tiles_per_row + (unsigned)(x / 8);
+    if(tile_offset >= 512) return 0;
+    uint16_t packed = smg_obj_tiles[tile_offset * 16 + (unsigned)(y & 7) * 2 + ((unsigned)(x & 7) >> 2)];
+    return (packed >> ((x & 3) * 4)) & 15;
+}
+
+void smg_game_render_ui(uint16_t* dst, unsigned stride){
+    if(!dst || stride < 320 || g_display_full_res) return;
+    for(int i = 0; i < 128; i++){
+        uint16_t a0 = OAM[i * 4], a1 = OAM[i * 4 + 1], a2 = OAM[i * 4 + 2];
+        bool affine = (a0 & 0x0100) != 0;
+        if((a0 & 0x0200) && !affine) continue;
+        unsigned shape = a0 >> 14, size = a1 >> 14;
+        int width, height;
+        smg_obj_dimensions(shape, size, &width, &height);
+        if(!width || !height) continue;
+        int x = a1 & 0x01ff, y = a0 & 0x00ff;
+        if(x >= 256) x -= 512;
+        if(y >= 160) y -= 256;
+        unsigned tile = (a2 & 0x03ff);
+        if(tile < 512) continue;
+        tile -= 512;
+        unsigned bank = (a2 >> 12) & 15;
+        bool hflip = !affine && (a1 & 0x1000);
+        bool vflip = !affine && (a1 & 0x2000);
+        int native_left = x, native_top = y;
+        int native_right = x + width, native_bottom = y + height;
+        int pa = 256, pb = 0, pc = 0, pd = 256;
+        if(affine){
+            unsigned matrix = (a1 >> 9) & 31;
+            pa = (int16_t)OAM[matrix * 16 + 3];
+            pb = (int16_t)OAM[matrix * 16 + 7];
+            pc = (int16_t)OAM[matrix * 16 + 11];
+            pd = (int16_t)OAM[matrix * 16 + 15];
+            int half_w = (a0 & 0x0200) ? width : width / 2;
+            int half_h = (a0 & 0x0200) ? height : height / 2;
+            native_left = x + width / 2 - half_w;
+            native_right = x + width / 2 + half_w;
+            native_top = y + height / 2 - half_h;
+            native_bottom = y + height / 2 + half_h;
+            if(pa == 0 && pb == 0 && pc == 0 && pd == 0) continue;
+        }
+        /* OAM remains in the GBA's 240x160 coordinate space. Rasterize that
+         * layout directly into the native 320x240 LCD output. */
+        int left = native_left * 4 / 3, top = native_top * 3 / 2;
+        int right = (native_right * 4 + 2) / 3, bottom = (native_bottom * 3 + 1) / 2;
+        if(left < 0) left = 0;
+        if(top < 0) top = 0;
+        if(right > 320) right = 320;
+        if(bottom > 240) bottom = 240;
+        for(int py = top; py < bottom; py++){
+            int native_y = py * 2 / 3;
+            int sy = native_y - y;
+            for(int px = left; px < right; px++){
+                int native_x = px * 3 / 4;
+                int sx = native_x - x;
+                if(affine){
+                    int dx = native_x - (x + width / 2);
+                    int dy = native_y - (y + height / 2);
+                    sx = width / 2 + (pa * dx + pb * dy) / 256;
+                    sy = height / 2 + (pc * dx + pd * dy) / 256;
+                }
+                if(sx < 0 || sx >= width || sy < 0 || sy >= height) continue;
+                if(hflip) sx = width - 1 - sx;
+                if(vflip) sy = height - 1 - sy;
+                unsigned color = smg_obj_pixel(tile, sx, sy, width);
+                if(color) dst[py * stride + px] = smg_obj_rgb565(bank * 16 + color);
+            }
+        }
+    }
+}
+#endif
+
 static void hud_set_fade(int level, bool white){
+#if defined(__GNW__)
+    (void)level;
+    (void)white;
+#else
     if(level <= 0){
         REG_BLDCNT = 0;
         return;
     }
     REG_BLDCNT = (white ? 0x0080 : 0x00C0) | 0x0004 | 0x0010 | 0x0020;
     REG_BLDY = (uint16_t)(level > 16 ? 16 : level);
+#endif
 }
 
 static void hud_counter_tick(HudCounter* c, int value, bool show_all, bool moving, bool count_up){

@@ -20,6 +20,28 @@ int palette_nearest_opaque(const Rgba *pal, const float col[3]) {
     return best;
 }
 
+/* Indexed as background*256 + foreground. Transparent foreground remains a
+ * no-op; solid texels use nearest-palette25% source/75% destination colours. */
+void palette_build_quarter_blend(uint8_t out[65536], const Rgba pal[256]) {
+    for (int background = 0; background < 256; background++) {
+        out[background * 256] = (uint8_t)background;
+        for (int foreground = 1; foreground < 256; foreground++) {
+            int r = 3 * pal[background].r + pal[foreground].r;
+            int g = 3 * pal[background].g + pal[foreground].g;
+            int b = 3 * pal[background].b + pal[foreground].b;
+            int best = 1, best_distance = INT32_MAX;
+            for (int candidate = 1; candidate < 256; candidate++) {
+                int dr = 4 * pal[candidate].r - r;
+                int dg = 4 * pal[candidate].g - g;
+                int db = 4 * pal[candidate].b - b;
+                int distance = dr * dr + dg * dg + db * db;
+                if (distance < best_distance) { best_distance = distance; best = candidate; }
+            }
+            out[background * 256 + foreground] = (uint8_t)best;
+        }
+    }
+}
+
 typedef struct {
     double r, g, b, a;
 } Colorf;

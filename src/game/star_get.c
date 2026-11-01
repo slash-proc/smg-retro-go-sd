@@ -86,11 +86,14 @@ static void wipe_update(void){
 }
 
 static void wipe_after_flip(void){
+#ifndef __GNW__
     if(g_wipe.mode == WIPE_OFF) return;
     REG_DISPCNT |= 0x2000;
+#endif
 }
 
 static void wipe_vblank(void){
+#ifndef __GNW__
     REG_DMA0CNT = 0;
     if(g_wipe.mode == WIPE_OFF) return;
     const uint16_t* lines = g_wipe_lines[g_wipe.front];
@@ -101,6 +104,7 @@ static void wipe_vblank(void){
     REG_DMA0SAD = (uint32_t)(lines + 1);
     REG_DMA0DAD = (uint32_t)&REG_WIN0H;
     REG_DMA0CNT = 1 | (0x8000u | 0x2000u | 0x0200u | 0x0040u) << 16;
+#endif
 }
 
 static void wipe_tick(void){
@@ -110,8 +114,10 @@ static void wipe_tick(void){
             g_wipe.mode = WIPE_CLOSED;
         } else {
             g_wipe.mode = WIPE_OFF;
+#ifndef __GNW__
             REG_DMA0CNT = 0;
             REG_DISPCNT &= (uint16_t)~0x2000;
+#endif
         }
     }
 }
@@ -276,8 +282,10 @@ static void star_get_draw_hud(void){
 }
 
 static void star_get_set_blend(void){
+#ifndef __GNW__
     if(g_game.scene != SCENE_STAR_GET || g_star_get_banner_alpha >= 16) return;
     int a = g_star_get_banner_alpha;
     REG_BLDCNT = (uint16_t)((REG_BLDCNT & 0x00FF) | 0x0400);
     REG_BLDALPHA = (uint16_t)(a | (16 - a) << 8);
+#endif
 }

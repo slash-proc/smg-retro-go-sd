@@ -67,6 +67,30 @@ So actually like windows but easier: do steps 2 to 4 of the Windows section in a
 
 The first build takes a few minutes. It downloads the disc tool `nodtool` and unpacks your disc, checks that every file it needs matches the original game. Also it constructs assets.
 
+## Disk usage and cleanup
+
+Run these commands from the project root:
+
+```sh
+make disk-usage    # Show the main disk consumers (build/ includes build/perf/).
+make clean-cache   # Remove Rust compiler caches, Ruff cache and Python bytecode.
+make clean-history # Remove performance runs and temporary emulator profiles/captures.
+```
+
+Stop builds and tests before cleaning caches. The next Rust build recompiles its
+dependencies. `clean-cache` preserves your ISO, extracted disc files, constructed
+assets, generated web WASM modules, Retro-Go bundles, performance evidence in
+`build/perf/`, and emulator profiles and captures in `tmp/`.
+
+`clean-history` removes `build/perf/`, `retro-go-sd/build/perf/`, and `tmp/`,
+while keeping the current build outputs and bundles.
+
+`make clean` removes the entire root `build/` directory, **including performance
+evidence**. `make distclean` also removes downloaded tools and dependency caches
+in `.tools/`. Use these only when you want a full rebuild and have saved any
+evidence you need. The Retro-Go build directory is separate; see
+[its build instructions](retro-go-sd/README.md).
+
 ## Come here for help
 
 - **`WSL2 is unable to start since virtualization is not enabled on this machine`** (Windows): turn on virtualization (Intel VT-x / AMD-V / SVM) in your PC's BIOS/UEFI settings, then run `wsl --install -d Ubuntu` again.

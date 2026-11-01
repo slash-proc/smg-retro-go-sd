@@ -34,7 +34,8 @@ static const char* const debug_home[] = {"Resume",
                                          "Restore health",
                                          "Add 100 Star Bits",
                                          "Power-ups",
-                                         "Return to Observatory"};
+                                         "Return to Observatory",
+                                         "Enter Astrodome"};
 static const char* const debug_option_names[] = {"Ignore enemy damage",
                                                  "Unlimited air",
                                                  "Unlimited Bee flight",
@@ -301,6 +302,8 @@ static void debug_menu_choose(int direction){
     case 6: g_game.star_bits = fx_min(g_game.star_bits + 100, 9999); break;
     case 7: debug_page(DEBUG_PAGE_POWERUPS); break;
     case 8: debug_start_level(STAGE_OBSERVATORY, 0); break;
+    /* The ordinary stage cycle skips hub rooms; expose this one for port tests. */
+    case 9: debug_start_level(STAGE_ASTRODOME, 0); break;
     }
 }
 static void debug_menu_tick(const KeyState* keys){
@@ -340,7 +343,7 @@ static void debug_menu_tick(const KeyState* keys){
 
 static void debug_pixel(uint16_t* fb, int x, int y, int color){
     if(x < 0 || x >= 240 || y < 0 || y >= 160) return;
-    int i = y * 240 + x;
+    int i = y * FRAME_STRIDE + x;
     uint16_t* p = fb + (i >> 1);
     *p = (uint16_t)((i & 1) ? ((*p & 255) | (color << 8)) : ((*p & 0xff00) | color));
 }
@@ -393,7 +396,8 @@ static void debug_menu_draw(uint8_t* page_bytes){
         return;
     }
 
-    for(int y = 0; y < 160; y++) dma3_copy32(framebuffer + y * 120, debug_menu_background + y * 240, 240 / 4);
+    for(int y = 0; y < 160; y++)
+        dma3_copy32(framebuffer + y * (FRAME_STRIDE / 2), debug_menu_background + y * 240, 240 / 4);
     uint8_t white[4] = {0, palette_nearest(10, 15, 20), palette_nearest(20, 25, 28),
                         palette_nearest(31, 31, 31)};
     uint8_t blue[4] = {0, palette_nearest(8, 16, 20), palette_nearest(12, 24, 29),

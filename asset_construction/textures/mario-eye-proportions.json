@@ -1,0 +1,179 @@
+{
+  "source_sha256": "146fd6421e190bb240893565dd29be48635c79e0ba3292c0bc2852a580dc8c50",
+  "result_sha256": "b0032a6076861cde4ce35109e605a8eabadf7ad973a262813cac4c6572132e67",
+  "recipe": "figures/mario/marioeye.png",
+  "original": {
+    "layers": [
+      {
+        "excl": [
+          "EyeLid_v",
+          "EyeballL_v",
+          "EyeballR_v"
+        ],
+        "lowxf": [
+          -1.9,
+          114,
+          0.8,
+          0.7,
+          0
+        ]
+      },
+      {
+        "cut": true,
+        "excl": [
+          "Body1_v",
+          "Cap_v",
+          "EyeLid_v",
+          "Face_v",
+          "Hair_v",
+          "Hand_v",
+          "Hand_v(2)"
+        ],
+        "far": true,
+        "lowxf": [
+          -1.9,
+          114,
+          0.8,
+          0.7,
+          0
+        ]
+      },
+      {
+        "excl": [
+          "Body1_v",
+          "Cap_v",
+          "EyeballL_v",
+          "EyeballR_v",
+          "Face_v",
+          "Hair_v",
+          "Hand_v",
+          "Hand_v(2)"
+        ],
+        "rect": [
+          0,
+          14,
+          32,
+          32
+        ]
+      },
+      {
+        "excl": [
+          "EyeLid_v",
+          "EyeballL_v",
+          "EyeballR_v"
+        ],
+        "lowxf": [
+          -1.9,
+          100,
+          1,
+          1,
+          0
+        ],
+        "rect": [
+          0,
+          17,
+          32,
+          32
+        ]
+      }
+    ],
+    "mat": "marioeye",
+    "mode": "stack",
+    "obj": "figures/mario/mario_base.obj",
+    "out": [
+      32,
+      32
+    ],
+    "src": "ObjectData/Mario.arc:mario.bdl"
+  },
+  "corrected": {
+    "layers": [
+      {
+        "excl": [
+          "EyeLid_v",
+          "EyeballL_v",
+          "EyeballR_v"
+        ],
+        "lowxf": [
+          -1.9,
+          114,
+          1,
+          1,
+          0
+        ]
+      },
+      {
+        "cut": true,
+        "excl": [
+          "Body1_v",
+          "Cap_v",
+          "EyeLid_v",
+          "Face_v",
+          "Hair_v",
+          "Hand_v",
+          "Hand_v(2)"
+        ],
+        "far": true,
+        "lowxf": [
+          -1.9,
+          114,
+          1,
+          1,
+          0
+        ]
+      },
+      {
+        "excl": [
+          "Body1_v",
+          "Cap_v",
+          "EyeballL_v",
+          "EyeballR_v",
+          "Face_v",
+          "Hair_v",
+          "Hand_v",
+          "Hand_v(2)"
+        ],
+        "rect": [
+          0,
+          14,
+          32,
+          32
+        ]
+      },
+      {
+        "excl": [
+          "EyeLid_v",
+          "EyeballL_v",
+          "EyeballR_v"
+        ],
+        "lowxf": [
+          -1.9,
+          100,
+          1,
+          1,
+          0
+        ],
+        "rect": [
+          0,
+          17,
+          32,
+          32
+        ]
+      }
+    ],
+    "mat": "marioeye",
+    "mode": "stack",
+    "obj": "figures/mario/mario_base.obj",
+    "out": [
+      32,
+      32
+    ],
+    "src": "ObjectData/Mario.arc:mario.bdl"
+  },
+  "changed_entry": "bake_specs.json",
+  "affected_images": [
+    "figures/mario/marioeye.png",
+    "figures/mariobee/marioeye.png",
+    "figures/mariofire/marioeye.png"
+  ]
+}

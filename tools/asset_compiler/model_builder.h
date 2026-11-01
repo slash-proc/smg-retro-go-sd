@@ -10,6 +10,16 @@ typedef uint16_t Rank6[6];
 typedef int IntPair[2];
 
 typedef struct {
+    const char *foreground, *background;
+} TextureUnderlay;
+
+enum { TEXTURE_ALPHA_OPAQUE, TEXTURE_ALPHA_COVERAGE, TEXTURE_ALPHA_BLEND_QUARTER };
+typedef struct {
+    const char *texture;
+    int mode;
+} TextureAlphaPolicy;
+
+typedef struct {
     int16_t offset;
     uint16_t tri;
 } AxisEntry;
@@ -48,6 +58,10 @@ typedef struct {
 typedef struct {
     const char *dir;
     const char *obj;
+    const TextureUnderlay *texture_underlays;
+    int texture_underlay_count;
+    const TextureAlphaPolicy *texture_alpha_policies;
+    int texture_alpha_policy_count;
     float shading_base, shading;
     float sun[3];
     int underwater;

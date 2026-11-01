@@ -58,7 +58,7 @@ static bool iceking_limit_select(void){
     return iceking_limit_ray(v3_add(position, v3_scale14(up, 150)), v3_sub(position, v3_scale14(up, 850)),
                              &h);
 }
-__attribute__((target("arm"), noinline)) static bool iceking_limit_sphere(
+GBA_ARM_TARGET_ATTR __attribute__((noinline)) static bool iceking_limit_sphere(
     int i, v3 centre, fx radius, SphereContact* out){
     const CollisionTriangle* t = &iceking_move_limit[i];
     v3 n = v3_from_i16(t->normal), a = iceking_limit_vertex(t, 0, centre);

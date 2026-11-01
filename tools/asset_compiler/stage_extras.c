@@ -277,8 +277,14 @@ static int camera_type(const char *s, const char *path, int line) {
     };
     for (int i = 0; i < CAM_TYPE_COUNT; i++)
         if (!strcmp(names[i], s)) return i;
+#ifdef SMG_ASSETC_MEMORY_FS
+    smg_assetc_fprintf(stderr,
+                       "%s:%d: camera type %s not supported, using CAM_TYPE_XZ_PARA (Galaxy's default)\n",
+                       path, line, s);
+#else
     fprintf(stderr, "%s:%d: camera type %s not supported, using CAM_TYPE_XZ_PARA (Galaxy's default)\n", path,
             line, s);
+#endif
     return CAM_XZ_PARA;
 }
 

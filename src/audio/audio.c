@@ -1,3 +1,19 @@
+#if defined(__GNW__)
+static void audio_clear_effect_queue(void){}
+static void audio_init(void){}
+static void audio_play_music(int track){ (void)track; }
+static void audio_stop_music(void){}
+static void audio_play_sub_music(int track, int lead_in){ (void)track; (void)lead_in; }
+static void audio_stop_sub_music(void){}
+static void audio_play_stage_music(int track){ (void)track; }
+static void audio_play_effect(int effect, int priority){ (void)effect; (void)priority; }
+static void audio_play_effect_soft(int effect, int priority){ (void)effect; (void)priority; }
+static void audio_queue_effect(int effect, int priority){ (void)effect; (void)priority; }
+static void audio_stop_effects(void){}
+static void audio_level_effect(int effect){ (void)effect; }
+static void audio_stop_level_effect(int effect){ (void)effect; }
+void audio_vblank(void){}
+#else
 #define REG_SOUNDCNT_L REG16(0x04000080)
 #define REG_SOUNDCNT_H REG16(0x04000082)
 #define REG_SOUNDCNT_X REG16(0x04000084)
@@ -443,3 +459,4 @@ void audio_vblank(void){
         a->effect_pending = AUDIO_EFFECT_NONE;
     }
 }
+#endif

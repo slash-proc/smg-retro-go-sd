@@ -24,7 +24,12 @@
 #define TM_FREQ_1024  0x0003
 #define VRAM          ((uint16_t*)0x06000000)
 #define PAGE_SIZE     0xA000
+#if defined(__GNW__)
+static uint16_t g_bg_palette[256];
+#define BG_PALETTE    g_bg_palette
+#else
 #define BG_PALETTE    ((volatile uint16_t*)0x05000000)
+#endif
 #define KEY_A         0x0001
 #define KEY_B         0x0002
 #define KEY_SELECT    0x0004
@@ -36,9 +41,19 @@
 #define KEY_R         0x0100
 #define KEY_L         0x0200
 #define KEY_MASK      0x03FF
+#if defined(__GNW__)
+/* Cortex-M7 executes Thumb/Thumb-2 only and uses the GWHB linker map rather
+ * than GBA EWRAM/IWRAM sections. Keep these as ordinary target code/data. */
+#define EWRAM_BSS
+#define IWRAM_CODE
+#define IWRAM_FN      __attribute__((noinline))
+#define GBA_ARM_TARGET_ATTR
+#else
 #define EWRAM_BSS     __attribute__((section(".ewram_bss")))
 #define IWRAM_CODE    __attribute__((section(".iwram.text"), target("arm")))
 #define IWRAM_FN      IWRAM_CODE __attribute__((noinline))
+#define GBA_ARM_TARGET_ATTR __attribute__((target("arm")))
+#endif
 
 static inline void dma3_copy32(void* dst, const void* src, uint32_t words);
 static inline void dma3_fill32(void* dst, const volatile uint32_t* value, uint32_t words);

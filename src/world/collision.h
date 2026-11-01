@@ -15,6 +15,24 @@ typedef struct {
     int count;
 } CollisionCandidates;
 
+#if defined(__GNW__)
+/* Eight recent losses of standing support, retained across respawns. The
+ * sequence is published last; inspect while halted for a coherent record. */
+#define COLLISION_INCIDENTS 8
+typedef struct {
+    volatile uint32_t sequence;
+    uint32_t tick;
+    int32_t stage, scenario;
+    uint32_t hidden_parts, flags;
+    v3 old_feet, feet, up, from, to;
+    int32_t hit_triangle, hit_t;
+    v3 hit_normal;
+    CollisionCandidates candidates;
+} CollisionIncident;
+extern CollisionIncident smg_collision_incidents[COLLISION_INCIDENTS];
+extern volatile uint32_t smg_collision_incident_sequence;
+#endif
+
 typedef struct {
     v3 normal;
     v3 point;
@@ -29,6 +47,12 @@ typedef struct {
     uint16_t attr;
     int16_t tri;
 } RayHit;
+
+#if defined(__GNW__)
+static void collision_record_support_loss(v3 old_feet, v3 feet, v3 up, v3 from, v3 to,
+                                          const CollisionCandidates* candidates,
+                                          bool ground_hit, const RayHit* hit);
+#endif
 
 #define COL_DYN_BASE 30720
 #define COL_DYN_MAX  192

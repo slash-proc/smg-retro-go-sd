@@ -1,0 +1,84 @@
+{
+  "reason": "Twelve platform side triangles in object kitchen reverse the winding of their adjoining surface components. Repair only their winding; preserve positions, UVs, materials, face count and recipe format.",
+  "evidence": "2026-10-23 screenshot 18:30:10; topology audit: five consistent manifold-edge components, 12 minority reversed faces, six equally directed shared edges before and zero after.",
+  "object": "kitchen",
+  "material": "t_mokume02",
+  "obj_sha256_before": "50c17b42bb4643201fae42a40e37b20629b2b4b7b352e25faa4eab8997f68b21",
+  "obj_sha256_after": "f4f9504b2f1e60b7d0e7a266c31fb6839bd0c2595c710b36127d7ecef3df6432",
+  "pack_sha256_before": "fe2e434443759feea3052ac64e7fe346173cb4832654a22850acdb30c65f1327",
+  "pack_sha256_after": "bedc99541b8dd973ba3ae829e4b6e57d42aabb98e135519cac4b74895fee0230",
+  "changes": [
+    {
+      "face": 2846,
+      "line": 7081,
+      "before": "f 1980/2100 1977/2100 2005/2132",
+      "after": "f 1980/2100 2005/2132 1977/2100"
+    },
+    {
+      "face": 2847,
+      "line": 7084,
+      "before": "f 2003/2129 2004/2129 2006/2133",
+      "after": "f 2003/2129 2006/2133 2004/2129"
+    },
+    {
+      "face": 2857,
+      "line": 7128,
+      "before": "f 2013/2137 2010/2137 2023/2150",
+      "after": "f 2013/2137 2023/2150 2010/2137"
+    },
+    {
+      "face": 2874,
+      "line": 7202,
+      "before": "f 2032/2155 2028/2155 2051/2179",
+      "after": "f 2032/2155 2051/2179 2028/2155"
+    },
+    {
+      "face": 2885,
+      "line": 7251,
+      "before": "f 2059/2184 2056/2184 2070/2198",
+      "after": "f 2059/2184 2070/2198 2056/2184"
+    },
+    {
+      "face": 2905,
+      "line": 7329,
+      "before": "f 2079/2200 2075/2200 2103/2223",
+      "after": "f 2079/2200 2103/2223 2075/2200"
+    },
+    {
+      "face": 2985,
+      "line": 7490,
+      "before": "f 1977/2100 2022/2132 2005/2132",
+      "after": "f 1977/2100 2005/2132 2022/2132"
+    },
+    {
+      "face": 2986,
+      "line": 7492,
+      "before": "f 2004/2129 2145/2133 2006/2133",
+      "after": "f 2004/2129 2006/2133 2145/2133"
+    },
+    {
+      "face": 2996,
+      "line": 7508,
+      "before": "f 2010/2137 2050/2150 2023/2150",
+      "after": "f 2010/2137 2023/2150 2050/2150"
+    },
+    {
+      "face": 3013,
+      "line": 7532,
+      "before": "f 2028/2155 2069/2179 2051/2179",
+      "after": "f 2028/2155 2051/2179 2069/2179"
+    },
+    {
+      "face": 3024,
+      "line": 7549,
+      "before": "f 2056/2184 2102/2198 2070/2198",
+      "after": "f 2056/2184 2070/2198 2102/2198"
+    },
+    {
+      "face": 3044,
+      "line": 7578,
+      "before": "f 2075/2200 2160/2223 2103/2223",
+      "after": "f 2075/2200 2103/2223 2160/2223"
+    }
+  ]
+}

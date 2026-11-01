@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SMG WASM asset conversion</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <p><a href="index.html">ISO identity check</a></p>
+    <h1>SMG WASM asset conversion</h1>
+    <p>Reads the manifest-selected Wii files through bounded browser ranges, constructs the runtime assets in WASM, and assembles the linked asset sidecar used by the Retro-Go SD homebrew.</p>
+    <label class="file-picker">Choose baserom_us.iso<input id="iso" type="file" accept=".iso,application/octet-stream"></label>
+    <p id="filename" class="filename">No file selected</p>
+    <label class="buffer-choice" for="buffer-size">
+      <span>WASM input range</span>
+      <select id="buffer-size">
+        <option value="8" selected>8 MiB · recommended</option>
+        <option value="64">64 MiB</option>
+        <option value="128">128 MiB</option>
+        <option value="256">256 MiB · high memory use</option>
+      </select>
+    </label>
+    <p class="memory-note">Larger ranges can read more disc data and use much more memory, with little speed gain in current tests. The ISO remains in browser file storage.</p>
+    <button id="extract" disabled>Convert ISO to linked asset XIP</button>
+    <progress id="progress" max="100" value="0" hidden></progress>
+    <p id="status" class="status">Waiting for an ISO.</p>
+    <p><a id="download" hidden>Download linked asset XIP</a></p>
+    <p><a href="index.html">Back to source verification</a></p>
+  </main>
+  <script src="extract.js" type="module"></script>
+</body>
+</html>

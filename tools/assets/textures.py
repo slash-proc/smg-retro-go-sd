@@ -7,6 +7,13 @@ from stages import GRAVITY_BYTES, STAGE_POINTERS, WIRE_GRAVITY
 MIP_BYTES = 1024
 PACKED_FAR_TEXTURES = 8
 FLAT_FAR_TEXTURE = 0x80000000
+DETAILED_FAR_TEXTURE = 0x40000000
+
+
+def far_texture_payload(record):
+    if record & FLAT_FAR_TEXTURE:
+        return (record & 0x3FFFFF00) >> 6 if record & DETAILED_FAR_TEXTURE else None
+    return record
 Bank = namedtuple("Bank", "origin field at records")
 FarBank = namedtuple("FarBank", "origin bank pairs table")
 
@@ -98,8 +105,13 @@ class TexturePool:
         packed = u16(self.memory, origin + 186) & PACKED_FAR_TEXTURES
         records = [u32(self.memory, bank + i * 4) if packed else bank - origin + i * TEXTURE_BYTES
                    for i in range(count)]
-        pairs = [None if record & FLAT_FAR_TEXTURE else (origin + record, origin + record + MIP_BYTES)
-                 for record in records]
+        offsets = [far_texture_payload(record) for record in records]
+        pairs = [None if offset is None else (origin + offset, origin + offset + MIP_BYTES)
+                 for offset in offsets]
+        for pair in pairs:
+            if pair is not None:
+                at = pair[0]
+                self.banks.append(Bank(origin, None, at, [self.memory[at:at + TEXTURE_BYTES]]))
         self.far_banks.append(FarBank(origin, bank, pairs, f"texture_far_refs_{len(self.far_banks)}"))
         self.replaced.add(origin + STAGE_POINTERS["textures"])
 
@@ -186,7 +198,11 @@ def pool_textures(assets):
         words[at] = f"{label_at(target)} - {label_at(origin)}" + (f" + {tag}" if tag else "")
     pool_bytes, bank_tables = build_mip_pool(pool.banks)
     tables = {}
+    far_offsets = {}
     for bank, pairs in zip(pool.banks, bank_tables):
+        if bank.field is None:
+            far_offsets[bank.at] = pairs[0]
+            continue
         label = tables.setdefault(pairs, f"texture_refs_{len(tables)}")
         words[bank.origin + bank.field] = f"{label} - {label_at(bank.origin)}"
     far_lines = []
@@ -195,8 +211,16 @@ def pool_textures(assets):
         far_lines += [f'    .section .rodata.assets.{bank.table}, "a"', "    .balign 4",
                       f"    .word {label_at(bank.bank)}", "    .word 0", f"    .global {bank.table}",
                       f"{bank.table}:"]
-        for pair in bank.pairs:
-            targets = [label_at(at) for at in pair] if pair else ["0", "0"]
+        for index, pair in enumerate(bank.pairs):
+            if pair is not None:
+                first, second = far_offsets[pair[0]]
+                targets = [f"texture_mip_raw_pool + {first}", f"texture_mip_raw_pool + {second}"]
+                if not u32(memory, bank.bank + index * 4) & FLAT_FAR_TEXTURE:
+                    # Legacy raw records are still read as header-relative mip0
+                    # by older runtimes when computing their average colour.
+                    words[bank.bank + index * 4] = f"texture_mip_raw_pool + {first} - {label_at(bank.origin)}"
+            else:
+                targets = ["0", "0"]
             far_lines += [f"    .word {target}" for target in targets]
 
     section = "texture_retained_section_0.bin"

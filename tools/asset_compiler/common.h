@@ -4,6 +4,9 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
+#ifdef SMG_ASSETC_MEMORY_FS
+#include <stdio.h>
+#endif
 
 void die(const char *fmt, ...) __attribute__((noreturn, format(printf, 1, 2)));
 void *xmalloc(size_t n);
@@ -14,6 +17,11 @@ char *format_string(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 
 uint8_t *read_file(const char *path, size_t *len);
 void write_file(const char *path, const void *data, size_t len);
+
+#ifdef SMG_ASSETC_MEMORY_FS
+int smg_assetc_fprintf(FILE *stream, const char *fmt, ...);
+void smg_assetc_fail(const char *message);
+#endif
 
 typedef struct {
     void *data;

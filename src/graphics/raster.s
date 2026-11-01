@@ -1,9 +1,11 @@
     .syntax unified
     .arm
 
-    .equ FRAME_STRIDE, 240
-    .equ FRAME_WIDTH, 120
-    .equ FRAME_HEIGHT, 80
+    .equ FRAME_STRIDE, 320
+    /* Legacy ARM path: match the current default C raster dimensions. The
+     * GNW native-resolution experiment uses the separate C implementation. */
+    .equ FRAME_WIDTH, 160
+    .equ FRAME_HEIGHT, 120
     .equ CLIP_NEAR_Z, 160
     .equ GUARD_SHIFT, 2
 
@@ -20,6 +22,7 @@
     .equ RM_ADD, 3
     .equ RM_DARKEN, 4
     .equ RM_TINT, 5
+    .equ RM_BLEND_QUARTER, 6
 
     .equ MIP1_STEP, 1536
 
@@ -128,14 +131,14 @@
     ldr     r9, [r10, r9, lsl #2]
     mul     r10, r9, r3
     mov     r10, r10, asr #14
-    mov     r11, r10, lsl #6
-    sub     r10, r11, r10, lsl #2
-    add     r10, r10, #15360
+    mov     r11, r10, lsl #7
+    add     r10, r11, r10, lsl #5
+    add     r10, r10, #40960
     mul     r11, r9, r4
     mov     r11, r11, asr #14
-    mov     r12, r11, lsl #5
-    add     r11, r12, r11, lsl #3
-    add     r11, r11, #10240
+    mov     r12, r11, lsl #7
+    sub     r11, r12, r11, lsl #3
+    add     r11, r11, #30720
     mov     r10, r10, asr #4
     mov     r10, r10, lsl #16
     mov     r10, r10, lsr #16
@@ -668,6 +671,9 @@ es_water_back:
     ldr     r8, [r11, #EJ_AVERAGE]
     ldrb    r8, [r8, r7]
     ldrb    r9, [sp, #ES_FACE + 20]
+    tst     r9, #16
+    movne   r12, #RM_BLEND_QUARTER
+    bne     5f
     tst     r9, #TRI_ALPHA
     movne   r12, #RM_ALPHA
     bne     5f
@@ -894,11 +900,13 @@ raster_face:
     str     r4, [sp, #RF_J0]
     str     r12, [sp, #RF_JM]
     ldr     r0, [sp, #RF_FB]
-    rsb     r5, r12, r12, lsl #4
-    add     r5, r0, r5, lsl #4
+    mov     r5, r12, lsl #8
+    add     r5, r5, r12, lsl #6
+    add     r5, r0, r5
     str     r5, [sp, #RF_END]
-    rsb     r5, r11, r11, lsl #4
-    add     r5, r0, r5, lsl #4
+    mov     r5, r11, lsl #8
+    add     r5, r5, r11, lsl #6
+    add     r5, r0, r5
     str     r5, [sp, #RF_BOT]
     ldrb    r0, [sp, #RF_MODE]
     cmp     r0, #RM_FLAT
@@ -1070,8 +1078,9 @@ rf_edges:
     mov     r5, r7
     mov     r7, r0
 3:  ldr     r0, [sp, #RF_FB]
-    rsb     r1, r9, r9, lsl #4
-    add     r8, r0, r1, lsl #4
+    mov     r1, r9, lsl #8
+    add     r1, r1, r9, lsl #6
+    add     r8, r0, r1
     ldrb    r0, [sp, #RF_MODE]
     cmp     r0, #RM_TEX
     beq     rf_tex
@@ -1548,11 +1557,36 @@ FillAdditive:
     bx      lr
     .pool
 
+    /* Legacy ARM raster fallback for the optional quarter-alpha material. */
+    .global FillQuarter
+FillQuarter:
+    stmfd   sp!, {r4, lr}
+    ldr     r4, =shade_quarter
+1:  TEXEL   r10
+    ldrb    r9, [r0]
+    add     r10, r10, r9, lsl #8
+    ldrb    r10, [r4, r10]
+    tst     r0, #1
+    beq     2f
+    ldrb    r9, [r0, #-1]
+    orr     r9, r9, r10, lsl #8
+    strh    r9, [r0, #-1]
+    b       3f
+2:  ldrb    r9, [r0, #1]
+    orr     r9, r10, r9, lsl #8
+    strh    r9, [r0]
+3:  add     r0, r0, #1
+    subs    r3, r3, #1
+    bne     1b
+    ldmfd   sp!, {r4, lr}
+    bx      lr
+    .pool
+
     .section .rodata.engine, "a", %progbits
     .align 2
     .global engine_fill_table
 engine_fill_table:
-    .word   FillFlat, 0, FillTexAlpha, FillAdditive, FillDarken, 0
+    .word   FillFlat, 0, FillTexAlpha, FillAdditive, FillDarken, 0, FillQuarter
     .global engine_recip_table
 engine_recip_table:
     .set m, 256

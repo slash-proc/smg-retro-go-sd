@@ -1,5 +1,17 @@
+#if defined(__GNW__)
+/* Software-backed GBA OBJ state. The homebrew compositor consumes the same
+ * tile/palette/OAM formats without accessing the GBA's unmapped memory. */
+extern volatile uint16_t smg_obj_tiles[512 * 16];
+extern volatile uint16_t smg_obj_palette[256];
+extern volatile uint16_t smg_obj_oam[128 * 4];
+#define OBJ_TILES        smg_obj_tiles
+#define OBJ_PALETTE      smg_obj_palette
+#define OAM              smg_obj_oam
+#else
 #define OBJ_TILES        ((volatile uint16_t*)0x06014000)
 #define OBJ_PALETTE      ((volatile uint16_t*)0x05000200)
+#define OAM              ((volatile uint16_t*)0x07000000)
+#endif
 #define REG_BLDCNT       REG16(0x04000050)
 #define REG_BLDY         REG16(0x04000054)
 #define HUD_STATIC_TILES 160

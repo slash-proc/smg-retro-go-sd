@@ -4,6 +4,13 @@
 #include <stdio.h>
 #include <string.h>
 
+#ifdef SMG_ASSETC_PROGRESS
+extern void smg_assetc_progress(uint32_t phase, uint32_t index, uint32_t total);
+#define OBJ_PROGRESS(index, total) smg_assetc_progress(33, (index), (total))
+#else
+#define OBJ_PROGRESS(index, total) ((void)0)
+#endif
+
 static int split_terms(char *line, char **terms, int max) {
     int n = 0;
     char *p = line;
@@ -76,8 +83,10 @@ static int compare_group_names(const void *a, const void *b, void *ctx) {
 }
 
 Obj obj_load(const char *path) {
+    OBJ_PROGRESS(0, 0);
     char *text = (char *)read_file(path, NULL);
     if (!text) die("cannot open %s", path);
+    OBJ_PROGRESS(1, 0);
 
     Obj obj = { VEC(float[3]), VEC(float[3]), VEC(ObjVertex), VEC(char *), VEC(ObjObject) };
     Vector groups = VEC(ObjGroup), default_group = VEC(ObjFace);
@@ -89,6 +98,7 @@ Obj obj_load(const char *path) {
         char *next = strchr(line, '\n');
         if (next) *next++ = 0;
         line_num++;
+        if (line_num % 10000 == 0) OBJ_PROGRESS((uint32_t)line_num, 0);
 
         char *terms[64];
         int n = split_terms(line, terms, 64);
@@ -162,6 +172,7 @@ Obj obj_load(const char *path) {
         stable_sort(g->data, g->len, sizeof(ObjGroup), compare_group_names, NULL);
     }
     free(text);
+    OBJ_PROGRESS((uint32_t)line_num + 1, 0);
     return obj;
 }
 

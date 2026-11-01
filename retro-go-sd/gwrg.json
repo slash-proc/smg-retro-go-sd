@@ -1,0 +1,57 @@
+{
+  "originalSystem": "wii",
+  "originalName": "Super Mario Galaxy",
+  "storage": ["flash", "sd"],
+  "artifacts": {
+    "smg_code.xip": {
+      "mapped": true,
+      "relocBase": "0xDEC00000"
+    }
+  },
+  "tool": {
+    "id": "smg-assets",
+    "processorExtensions": {
+      "range-input": 1
+    },
+    "title": {
+      "en": "Super Mario Galaxy asset conversion"
+    },
+    "maxOutputBytes": 41943040,
+    "options": [],
+    "inputs": [
+      {
+        "id": "disc",
+        "required": true,
+        "allowMultiple": false,
+        "label": {
+          "en": "Super Mario Galaxy USA disc image"
+        },
+        "description": {
+          "en": "The USA RMGE01 Rev.00 ISO image. The converter reads selected assets from the image in bounded ranges."
+        },
+        "extensions": [
+          ".iso"
+        ],
+        "maxBytes": 4699979776,
+        "strict": true,
+        "variants": [
+          {
+            "id": "usa-rev-00",
+            "sha1": "a36105c9fbfff6041dc5babf4318c6a216ad470a",
+            "bytes": 4699979776
+          }
+        ]
+      }
+    ],
+    "outputs": [
+      {
+        "id": "assets",
+        "filename": "smg_assets.xip",
+        "maxBytes": 41943040,
+        "label": {
+          "en": "SMG mapped asset sidecar"
+        }
+      }
+    ]
+  }
+}

@@ -32,6 +32,7 @@
 #include "world/camera_galaxy.h"
 #include "world/areas.h"
 #include "graphics/frame.h"
+#include "graphics/perf.h"
 #include "graphics/sky.h"
 #include "graphics/visibility.h"
 #include "graphics/engine.h"

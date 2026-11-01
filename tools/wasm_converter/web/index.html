@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#11151b">
+  <title>SMG Asset Converter</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <header>
+      <div class="eyebrow">RETRO-GO SD · BROWSER TOOL</div>
+      <h1>SMG asset converter</h1>
+      <p class="lede">A browser-based conversion path for Super Mario Galaxy (USA).</p>
+    </header>
+
+    <section class="card">
+      <div class="step">01 <span>Source disc</span></div>
+      <p>Select the USA <code>RMGE01</code> ISO. This stage checks its complete SHA-1 using the selected range size; the ISO is never copied into WASM memory or browser storage.</p>
+      <label class="file-picker" for="iso">
+        <span>Choose ISO</span>
+        <span id="filename" class="filename">No file selected</span>
+        <input id="iso" type="file" accept=".iso,application/octet-stream">
+      </label>
+      <label class="buffer-choice" for="buffer-size">
+        <span>WASM input buffer</span>
+        <select id="buffer-size">
+          <option value="64" selected>64 MiB · recommended</option>
+          <option value="128">128 MiB</option>
+          <option value="256">256 MiB · high memory use</option>
+        </select>
+      </label>
+      <p class="memory-note">The selected size is allocated in WASM memory. Reading and copying each range temporarily needs a second buffer of similar size in the browser.</p>
+      <button id="verify" disabled>Verify source image</button>
+      <progress id="progress" max="4699979776" value="0" hidden></progress>
+      <p id="status" class="status" role="status" aria-live="polite">Waiting for an ISO.</p>
+    </section>
+
+    <section class="card next">
+      <div class="step">02 <span>Asset conversion</span></div>
+      <p>The converter reads the Wii partition through bounded file ranges and builds the final <code>smg_assets.xip</code> sidecar. The sidecar matches the native build; it is one component of the installable GWRG bundle.</p>
+      <p><a href="extract.html">Convert the ISO and download the generated asset pack</a></p>
+    </section>
+
+    <footer>
+      Expected source: <code>RMGE01</code>, 4,699,979,776 bytes, SHA-1
+      <code>a36105c9fbfff6041dc5babf4318c6a216ad470a</code>.
+    </footer>
+  </main>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

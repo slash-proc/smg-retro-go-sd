@@ -6,5 +6,6 @@ static bool mario_launcher_bound(void);
 static bool mario_launcher_aiming(void);
 static void mario_launcher_gate_init(Actor* a, const StageObject* o);
 static void shutter_think(Actor* a);
+static fx shutter_gate_draw_extent(const Actor* actor);
 static void mario_launcher_think(Actor* a);
 static bool mario_launcher_camera(fx dt, const KeyState* keys);

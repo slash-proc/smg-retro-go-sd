@@ -1,0 +1,20 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>WASM range read probe</title>
+<label>Choose an input over 4 GiB: <input id="file" type="file"></label>
+<pre id="result">Waiting for a file.</pre>
+<script type="module">
+const fileInput = document.querySelector("#file");
+const result = document.querySelector("#result");
+fileInput.addEventListener("change", () => {
+  const file = fileInput.files?.[0];
+  if (!file) return;
+  result.textContent = `Reading a 64-byte range from a ${file.size}-byte file...`;
+  const worker = new Worker("worker.js");
+  worker.onmessage = ({ data }) => {
+    result.textContent = data.error ?? `Read completed. FNV-1a: ${data.checksum}; file bytes: ${data.fileBytes}`;
+    worker.terminate();
+  };
+  worker.postMessage({ file, wasmUrl: "range_probe.wasm" });
+});
+</script>
